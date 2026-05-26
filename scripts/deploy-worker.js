@@ -1,12 +1,12 @@
 // ============================================
-// FlareStack — Production Deployment Script
+// FlareStack — Worker Deployment Script
 // ============================================
 //
-// Usage: pnpm run deploy
+// Usage: pnpm run deploy-worker
 //
 // Handles on first-run infrastructure creation,
-// config file updates, and full deployment in
-// one command.
+// config file updates, DB migrations, and worker
+// deployment in one command.
 // ============================================
 
 const { execSync } = require('child_process');
@@ -52,7 +52,6 @@ function divider() { console.log(`${C.dim}${'─'.repeat(44)}${C.reset}`); }
 
 // ── Shell Helper ─────────────────────────────
 function run(command, options = {}) {
-    // We MUST use 'pipe' if we want to capture output for error analysis
     const stdio = (options.silent || options.captureError) ? 'pipe' : 'inherit';
     
     try {
@@ -61,8 +60,6 @@ function run(command, options = {}) {
             stdio: stdio
         });
         
-        // If we captured output but weren't asked to be silent, 
-        // print it now so the user sees progress
         if (!options.silent && options.captureError && stdout) {
             process.stdout.write(stdout);
         }
@@ -71,8 +68,6 @@ function run(command, options = {}) {
     } catch (err) {
         if (options.ignoreError) return err.stdout || err.message;
         
-        // If the caller wants to handle the error themselves, throw it
-        // execSync attaches stdout/stderr to the error object when using 'pipe'
         if (options.captureError) throw err;
 
         error(`Command failed: ${command}`);
@@ -84,7 +79,7 @@ function run(command, options = {}) {
 
 // ── Deploy ───────────────────────────────────
 async function deploy() {
-    header('FlareStack  Production Deployment');
+    header('FlareStack  Worker Deployment');
 
     // ── 1. Auth Check ────────────────────────
     step('Checking Cloudflare authentication');
@@ -114,7 +109,6 @@ async function deploy() {
             info('Creating new D1 database: flarestack-db');
             const created = run('npx wrangler d1 create flarestack-db', { silent: true });
 
-            // Extract database_id from config snippet in stdout
             const match = created.match(/"database_id":\s*"([^"]+)"/);
             if (match) {
                 dbId = match[1];
@@ -132,13 +126,7 @@ async function deploy() {
     console.log('');
 
     // ── 3. Update Config Files ───────────────
-    step('Updating wrangler config files with production IDs');
-
-    const dashboardConfPath = path.join(__dirname, '../apps/dashboard/wrangler.jsonc');
-    let dashboardConf = fs.readFileSync(dashboardConfPath, 'utf8');
-    dashboardConf = dashboardConf.replace(/"database_id":\s*"[^"]*"/, `"database_id": "${dbId}"`);
-    fs.writeFileSync(dashboardConfPath, dashboardConf);
-    success('apps/dashboard/wrangler.jsonc updated');
+    step('Updating wrangler config file with production D1 ID');
 
     const workerConfPath = path.join(__dirname, '../apps/worker/wrangler.jsonc');
     let workerConf = fs.readFileSync(workerConfPath, 'utf8');
@@ -148,18 +136,17 @@ async function deploy() {
 
     console.log('');
 
-    // ── 4. Deploy ────────────────────────────
+    // ── 4. DB Migrations ─────────────────────
     const shouldReset = process.argv.includes('--reset-db');
 
     if (shouldReset) {
         warn('Resetting production database as requested...');
-        // Drop common tables + migration table to allow a clean re-run
         const dropTables = [
             'account', 'session', 'user', 'verification', 
             'action_logs', 'add_ip_to_list_rules', 'cloudflare_accounts', 
             'zone_configs', 'entity_cache', 'd1_migrations'
         ];
-        const dropCommand = `npx wrangler d1 execute flarestack-db --remote --command "${dropTables.map(t => `DROP TABLE IF EXISTS ${t}`).join('; ')};" --config apps/dashboard/wrangler.jsonc`;
+        const dropCommand = `npx wrangler d1 execute flarestack-db --remote --command "${dropTables.map(t => `DROP TABLE IF EXISTS ${t}`).join('; ')};" --config apps/worker/wrangler.jsonc`;
         run(dropCommand);
         success('Production database wiped');
         console.log('');
@@ -167,7 +154,7 @@ async function deploy() {
 
     step('Applying DB migrations to production');
     try {
-        run('npx wrangler d1 migrations apply flarestack-db --remote --config apps/dashboard/wrangler.jsonc', { captureError: true });
+        run('npx wrangler d1 migrations apply flarestack-db --remote --config apps/worker/wrangler.jsonc', { captureError: true });
         success('Migrations applied');
     } catch (err) {
         const stdout = err.stdout?.toString() || '';
@@ -179,12 +166,12 @@ async function deploy() {
             console.log(`${C.bold}${C.red}${ICON.error} CONFLICT: Production database is out of sync with your local history.${C.reset}`);
             console.log(`${C.dim}──────────────────────────────────────────────────────────────────${C.reset}`);
             console.log(`${C.yellow}Why this happened:${C.reset}`);
-            console.log(`You likely ran ${C.cyan}pnpm run nuke${C.reset} locally, which wiped your migration history.`);
+            console.log(`You likely ran local database nuking, which wiped your local migration history.`);
             console.log(`However, your remote Cloudflare D1 database still has your old tables.`);
             console.log('');
             console.log(`${C.green}The Fix:${C.reset}`);
             console.log(`Run the deploy again with the ${C.bold}--reset-db${C.reset} flag to wipe production and start fresh:`);
-            console.log(`${C.bold}${C.cyan}  pnpm run deploy -- --reset-db${C.reset}`);
+            console.log(`${C.bold}${C.cyan}  pnpm run deploy-worker -- --reset-db${C.reset}`);
             console.log(`${C.dim}──────────────────────────────────────────────────────────────────${C.reset}\n`);
             process.exit(1);
         } else {
@@ -197,102 +184,17 @@ async function deploy() {
 
     console.log('');
 
+    // ── 5. Deploy Worker ─────────────────────
     step('Deploying Worker');
     run('pnpm --filter @flarestack/worker run deploy');
     success('Worker deployed');
 
-    console.log('');
-
-    step('Deploying Dashboard');
-    const deployOutput = run('pnpm --filter dashboard run deploy', { silent: true });
-    
-    // Extract the production URL from wrangler output
-    let prodUrl = '<YOUR_PRODUCTION_URL>';
-    const urlMatch = deployOutput.match(/https:\/\/[a-z0-9-]+\.[a-z0-9-]+\.workers\.dev/i);
-    if (urlMatch) {
-        prodUrl = urlMatch[0];
-    }
-
-    console.log(deployOutput); 
-    success('Dashboard deployed');
-    if (prodUrl !== '<YOUR_PRODUCTION_URL>') {
-        kv('URL', prodUrl);
-    }
-
-    // ── 6. Sync Cloudflare Secrets ───────────
-    step('Syncing Cloudflare production secrets from .prod.vars');
-
-    const prodVarsPath = path.join(__dirname, '../apps/dashboard/.prod.vars');
-    let prodVars = '';
-    try {
-        prodVars = fs.readFileSync(prodVarsPath, 'utf8');
-    } catch {
-        warn('.prod.vars not found — skipping secret sync. Create apps/dashboard/.prod.vars to automate this.');
-    }
-
-    const parseVar = (content, key) => {
-        const match = content.match(new RegExp(`${key}="([^"]+)"`));
-        return match ? match[1] : '';
-    };
-
-    const pushSecret = (key, value) => {
-        if (!value) return false;
-        run(
-            `printf '%s' "${value}" | npx wrangler secret put ${key} --config apps/dashboard/wrangler.jsonc`,
-            { silent: true, ignoreError: true }
-        );
-        return true;
-    };
-
-    if (prodVars) {
-        let authSecret = parseVar(prodVars, 'BETTER_AUTH_SECRET');
-        let baseUrl = parseVar(prodVars, 'BETTER_AUTH_BASE_URL');
-        const resendApiKey = parseVar(prodVars, 'RESEND_API_KEY');
-        const resendFrom = parseVar(prodVars, 'RESEND_FROM');
-
-        // Auto-generate BETTER_AUTH_SECRET if missing
-        if (!authSecret) {
-            const crypto = require('crypto');
-            authSecret = crypto.randomBytes(32).toString('base64');
-            const updatedVars = prodVars.replace(/BETTER_AUTH_SECRET="[^"]*"/, `BETTER_AUTH_SECRET="${authSecret}"`);
-            prodVars = updatedVars; // Update memory copy
-            fs.writeFileSync(prodVarsPath, updatedVars);
-            success('Generated new BETTER_AUTH_SECRET and saved to .prod.vars');
-        }
-
-        // Auto-fix BETTER_AUTH_BASE_URL if it's the placeholder
-        if ((!baseUrl || baseUrl.includes('your-app.workers.dev')) && prodUrl !== '<YOUR_PRODUCTION_URL>') {
-            baseUrl = prodUrl;
-            const updatedVars = prodVars.replace(/BETTER_AUTH_BASE_URL="[^"]*"/, `BETTER_AUTH_BASE_URL="${baseUrl}"`);
-            fs.writeFileSync(prodVarsPath, updatedVars);
-            success(`Auto-updated BETTER_AUTH_BASE_URL to ${baseUrl}`);
-        }
-
-        if (!baseUrl) warn('BETTER_AUTH_BASE_URL is empty in .prod.vars — auth will fail in production!');
-
-        pushSecret('BETTER_AUTH_SECRET', authSecret) && info('BETTER_AUTH_SECRET pushed');
-        pushSecret('BETTER_AUTH_BASE_URL', baseUrl) && info('BETTER_AUTH_BASE_URL pushed');
-
-        if (resendApiKey) {
-            pushSecret('RESEND_API_KEY', resendApiKey) && info('RESEND_API_KEY pushed');
-            if (resendFrom) {
-                pushSecret('RESEND_FROM', resendFrom) && info('RESEND_FROM pushed');
-            }
-            success('All secrets synced (email verification enabled via Resend)');
-        } else {
-            success('Core secrets synced (Resend not configured — accounts will auto-activate)');
-        }
-    }
-
     // ── Done ─────────────────────────────────
     console.log('');
     divider();
-    console.log(`${C.bold}${C.green}✨ Deployment complete!${C.reset}`);
+    console.log(`${C.bold}${C.green}✨ Worker deployment complete!${C.reset}`);
     console.log('');
     kv('D1 Database ID ', dbId);
-    if (prodUrl !== '<YOUR_PRODUCTION_URL>') {
-        kv('Production URL ', prodUrl);
-    }
     divider();
     console.log('');
 }

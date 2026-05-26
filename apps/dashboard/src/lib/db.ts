@@ -14,7 +14,7 @@ class CloudflareD1HttpClient {
   }
 
   private async executeQuery(payload: any): Promise<any> {
-    const url = `https://api.cloudflare.com/client/v4/accounts/${this.accountId}/d1/databases/${this.databaseId}/query`;
+    const url = `https://api.cloudflare.com/client/v4/accounts/${this.accountId}/d1/database/${this.databaseId}/query`;
     const res = await fetch(url, {
       method: "POST",
       headers: {

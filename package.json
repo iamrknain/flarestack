@@ -10,7 +10,7 @@
     "setup": "bash scripts/setup-local.sh",
     "clean": "bash scripts/clean.sh",
     "nuke:db": "bash scripts/nuke-db.sh",
-    "deploy": "node scripts/deploy-prod.js",
+    "deploy-worker": "node scripts/deploy-worker.js",
     "build": "pnpm -r run build",
     "test": "pnpm -r run test",
     "typecheck": "pnpm -r run typecheck"
