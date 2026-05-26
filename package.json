@@ -8,7 +8,8 @@
     "//stop": "Use 'pnpm stop' when closing the terminal tab (instead of Ctrl+C) leaves orphan dev servers holding ports 5173, 8787, or 9229. Ctrl+C in the same terminal sends SIGINT to the whole process group and kills everything cleanly — but closing the tab only kills pnpm, leaving grandchild node/wrangler processes running as orphans.",
     "stop": "fuser -k 9229/tcp 5173/tcp 8787/tcp || true",
     "setup": "bash scripts/setup-local.sh",
-    "nuke": "bash scripts/nuke.sh",
+    "clean": "bash scripts/clean.sh",
+    "nuke:db": "bash scripts/nuke-db.sh",
     "deploy": "node scripts/deploy-prod.js",
     "build": "pnpm -r run build",
     "test": "pnpm -r run test",
@@ -19,6 +20,12 @@
   "license": "ISC",
   "packageManager": "pnpm@10.30.1",
   "devDependencies": {
-    "wrangler": "^4.67.0"
+    "tsx": "^4.22.3",
+    "wrangler": "^4.94.0"
+  },
+  "pnpm": {
+    "overrides": {
+      "drizzle-orm": "^0.39.3"
+    }
   }
 }

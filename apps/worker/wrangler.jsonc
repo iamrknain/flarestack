@@ -19,7 +19,7 @@
         }
     ],
     "vars": {
-        "DEBUG": "false"
+        "DEBUG": "true"
     },
     "observability": {
         "logs": {
