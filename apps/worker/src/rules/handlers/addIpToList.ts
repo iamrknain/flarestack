@@ -1,4 +1,4 @@
-import { RuleHandler, RuleContext } from '../interface';
+import { RuleHandler, RuleContext, AddIpToListRuleRow } from '../interface';
 import { log } from '../../lib/log';
 import type { ListItemInput } from '@flarestack/cloudflare';
 
@@ -8,7 +8,8 @@ export class AddIpToListRule implements RuleHandler {
      * deduplicates against the D1 entity cache, adds only genuinely new IPs
      * via a single batch POST, then writes audit logs.
      */
-    async execute({ zone, rule, cf, actionLogger, cacheStore, prefetchedIps }: RuleContext): Promise<void> {
+    async execute({ zone, rule: baseRule, cf, actionLogger, cacheStore, prefetchedIps }: RuleContext): Promise<void> {
+        const rule = baseRule as AddIpToListRuleRow;
         log(
             `  Rule [add_ip_to_list] id=${rule.id} list=${rule.cfListId} ` +
             `threshold=${rule.rateLimitThreshold} window=${rule.windowSeconds}s`

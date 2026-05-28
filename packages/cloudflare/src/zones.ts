@@ -39,4 +39,31 @@ export class ZonesApi extends CloudflareApiBase {
 
         return allZones;
     }
+
+    /**
+     * Gets the security level for a zone.
+     * Returns: 'off' | 'essentially_off' | 'low' | 'medium' | 'high' | 'under_attack'
+     */
+    async getSecurityLevel(zoneId: string): Promise<string> {
+        const response = await this.fetchRest<{ id: string; value: string }>(
+            `/zones/${zoneId}/settings/security_level`
+        );
+        return response.value;
+    }
+
+    /**
+     * Sets the security level for a zone.
+     */
+    async setSecurityLevel(
+        zoneId: string,
+        level: 'under_attack' | 'essentially_off' | 'low' | 'medium' | 'high'
+    ): Promise<void> {
+        await this.fetchRest(
+            `/zones/${zoneId}/settings/security_level`,
+            {
+                method: 'PATCH',
+                body: JSON.stringify({ value: level }),
+            }
+        );
+    }
 }

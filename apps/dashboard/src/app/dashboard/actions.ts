@@ -67,6 +67,7 @@ export async function dashboardAction(formData: FormData) {
       const name = formData.get("name") as string;
       const cfZoneId = formData.get("cfZoneId") as string;
       const cfAccountRef = formData.get("cfAccountRef") as string;
+      const domain = formData.get("domain") as string;
 
       if (!name || !cfZoneId || !cfAccountRef) {
         return { error: "All fields are required." };
@@ -78,6 +79,7 @@ export async function dashboardAction(formData: FormData) {
         cfAccountRef,
         name,
         cfZoneId,
+        domain: domain || null,
         createdAt: new Date(),
         updatedAt: new Date(),
       });

@@ -100,7 +100,9 @@ export class AnalyticsApi extends CloudflareApiBase {
       const filterStr = p.windowSeconds
         ? `filter: { datetime_geq: ${startVar}, datetime_leq: ${endVar} }`
         : '';
-      const dimensionsStr = p.dimensions.join(', ');
+      const dimensionsBlock = p.dimensions.length > 0
+        ? `dimensions { ${p.dimensions.join(', ')} }`
+        : '';
 
       aliasBlocks.push(`
                 ${alias}: zones(filter: { zoneTag: ${ztVar} }) {
@@ -110,7 +112,7 @@ export class AnalyticsApi extends CloudflareApiBase {
                         orderBy: [count_DESC]
                     ) {
                         count
-                        dimensions { ${dimensionsStr} }
+                        ${dimensionsBlock}
                     }
                 }
             `);
@@ -166,7 +168,9 @@ export class AnalyticsApi extends CloudflareApiBase {
       datetimeEnd = new Date(end).toISOString().split('.')[0] + 'Z';
     }
 
-    const dimensionsStr = params.dimensions.join(', ');
+    const dimensionsBlock = params.dimensions.length > 0
+      ? `dimensions { ${params.dimensions.join(', ')} }`
+      : '';
     const filterStr = params.windowSeconds
       ? 'filter: { datetime_geq: $start, datetime_leq: $end }'
       : '';
@@ -181,7 +185,7 @@ export class AnalyticsApi extends CloudflareApiBase {
                             orderBy: [count_DESC]
                         ) {
                             count
-                            dimensions { ${dimensionsStr} }
+                            ${dimensionsBlock}
                         }
                     }
                 }

@@ -17,6 +17,7 @@ export const zoneConfigs = sqliteTable('zone_configs', {
     cfAccountRef: text('cf_account_ref').notNull().references(() => cloudflareAccounts.id),
     name: text('name').notNull(),
     cfZoneId: text('cf_zone_id').notNull(),
+    domain: text('domain'),
     isActive: integer('is_active', { mode: 'boolean' }).notNull().default(true),
     createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
     updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
@@ -33,6 +34,25 @@ export const addIpToListRules = sqliteTable('add_ip_to_list_rules', {
     cfListName: text('cf_list_name'),
     rateLimitThreshold: integer('rate_limit_threshold').notNull().default(10000),
     windowSeconds: integer('window_seconds').notNull().default(300),
+    isActive: integer('is_active', { mode: 'boolean' }).notNull().default(true),
+    createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+    updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
+});
+
+// ─── Under attack rules ──────────────────────────────────────────────────────────
+// Rule: when request count exceeds threshold, trigger CF Under Attack mode.
+export const underAttackRules = sqliteTable('under_attack_rules', {
+    id: text('id').primaryKey(),
+    name: text('name').notNull().default('Under Attack Toggle Rule'),
+    zoneConfigId: text('zone_config_id').notNull().references(() => zoneConfigs.id),
+    userId: text('user_id').notNull().references(() => user.id),
+    rateLimitThreshold: integer('rate_limit_threshold').notNull().default(10000), // ON Threshold
+    autoOff: integer('auto_off', { mode: 'boolean' }).notNull().default(false),   // Auto-Off toggle
+    offThreshold: integer('off_threshold'),                                     // OFF Threshold (nullable)
+    windowSeconds: integer('window_seconds').notNull().default(300),            // Analytics window
+    recoveryLevel: text('recovery_level').notNull().default('medium'),          // 'essentially_off' | 'low' | 'medium' | 'high'
+    sendNotification: integer('send_notification', { mode: 'boolean' }).notNull().default(false), // Notification toggle
+    notifyEmails: text('notify_emails'),                                        // Comma-separated email list
     isActive: integer('is_active', { mode: 'boolean' }).notNull().default(true),
     createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
     updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),

@@ -1,11 +1,12 @@
 import { CloudflareClient } from '@flarestack/cloudflare';
 import { ActionLogger } from '../lib/actions/logger';
 import { CacheStore } from '@flarestack/db/src/cache';
-import { addIpToListRules } from '@flarestack/db/src/schema/zones';
+import { addIpToListRules, underAttackRules } from '@flarestack/db/src/schema/zones';
 
 // Typed rule rows per rule type — extend this union as new rule types are added.
 export type AddIpToListRuleRow = typeof addIpToListRules.$inferSelect;
-export type AnyRuleRow = AddIpToListRuleRow;
+export type UnderAttackRuleRow = typeof underAttackRules.$inferSelect;
+export type AnyRuleRow = AddIpToListRuleRow | UnderAttackRuleRow;
 
 export interface ZoneConfig {
     id: string;
@@ -24,6 +25,7 @@ export interface RuleContext {
     /** Pre-fetched flagged IPs from a batched GraphQL call. When present,
      *  the handler should skip its own analytics query. */
     prefetchedIps?: { ip: string; count: number }[];
+    env?: any;
 }
 
 export interface RuleHandler {

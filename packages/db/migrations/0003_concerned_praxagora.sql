@@ -1,0 +1,1 @@
+ALTER TABLE `zone_configs` ADD `domain` text;

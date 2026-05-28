@@ -23,7 +23,8 @@ export class RuleEngine {
     constructor(
         private accountMap: Map<string, AccountRow>,
         private actionLogger: ActionLogger,
-        private cacheStore: CacheStore
+        private cacheStore: CacheStore,
+        private env?: any
     ) { }
 
     /**
@@ -110,6 +111,7 @@ export class RuleEngine {
                     actionLogger: this.actionLogger,
                     cacheStore: this.cacheStore,
                     prefetchedIps,
+                    env: this.env,
                 });
             })
         );

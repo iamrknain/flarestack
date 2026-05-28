@@ -1,5 +1,6 @@
 import { RuleHandler } from './interface';
 import { AddIpToListRule } from './handlers/addIpToList';
+import { UnderAttackModeRule } from './handlers/underAttackMode';
 
 // We map the database rule "type" string to its matching RuleHandler class.
 //
@@ -11,6 +12,7 @@ import { AddIpToListRule } from './handlers/addIpToList';
 // inside execute(). Violating this will cause subtle data-race bugs.
 export const RuleHandlers: Record<string, RuleHandler> = {
     'add_ip_to_list': new AddIpToListRule(),
+    'under_attack_mode': new UnderAttackModeRule(),
     // Future plugins:
     // 'js_challenge': new JsChallengeRule(),
     // 'block_asn': new BlockAsnRule(),

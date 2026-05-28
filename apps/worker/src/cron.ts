@@ -169,7 +169,7 @@ export async function runCronTasks(env: Env): Promise<void> {
     // ── 5. Create engine and process all zones concurrently ───────────────────
     const actionLogger = new ActionLogger(db);
     const cacheStore = new CacheStore(db);
-    const engine = new RuleEngine(accountMap, actionLogger, cacheStore);
+    const engine = new RuleEngine(accountMap, actionLogger, cacheStore, env);
 
     const results = await Promise.allSettled(
         activeZones.map(zone =>

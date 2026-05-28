@@ -1,6 +1,6 @@
-import { addIpToListRules } from "@flarestack/db/src/schema/zones";
+import { addIpToListRules, underAttackRules } from "@flarestack/db/src/schema/zones";
 
-export type RuleType = "add_ip_to_list" | "js_challenge" | "block_country";
+export type RuleType = "add_ip_to_list" | "js_challenge" | "block_country" | "under_attack_mode";
 
 export interface RuleBaseConfig {
     type: RuleType;
@@ -44,5 +44,11 @@ export const RULES_MANIFEST: Record<RuleType, RuleBaseConfig> = {
         name: "Geographic Block",
         description: "Blocks traffic originating from specific countries.",
         // table: countryBlockRules (future)
+    },
+    'under_attack_mode': {
+        type: 'under_attack_mode',
+        name: "Auto Under Attack Mode",
+        description: "Automatically enables Cloudflare Under Attack Mode when traffic spikes, and disables it when traffic normalizes.",
+        table: underAttackRules
     }
 };

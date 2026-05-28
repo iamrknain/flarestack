@@ -1,10 +1,10 @@
-# FlareStack 🚀
+# FlareStack
 
 FlareStack is a SaaS-ready, edge-native IP reputation and automated blocking system built for Cloudflare. It analyzes traffic telemetry at the edge and automatically updates WAF blocklists to mitigate volumetric DDoS, scrapers, and abusive bots in real-time with zero origin latency.
 
 ---
 
-## 🏗 Monorepo Architecture
+## Monorepo Architecture
 
 FlareStack is structured as a pnpm monorepo:
 

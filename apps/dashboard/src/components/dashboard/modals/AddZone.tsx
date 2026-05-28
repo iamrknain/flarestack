@@ -14,6 +14,9 @@ export function AddZone({ onClose, accounts, onRefresh }: {
     const [isFetchingZones, setIsFetchingZones] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [selectedZoneId, setSelectedZoneId] = useState("");
+
+    const selectedZoneObj = discoveredZones.find((z) => z.id === selectedZoneId);
 
     useEffect(() => {
         if (selectedAccount) {
@@ -39,6 +42,7 @@ export function AddZone({ onClose, accounts, onRefresh }: {
         } else {
             setDiscoveredZones([]);
         }
+        setSelectedZoneId("");
     }, [selectedAccount]);
 
     const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -66,12 +70,13 @@ export function AddZone({ onClose, accounts, onRefresh }: {
             subtitle="Which domain's traffic to monitor"
             icon={
                 <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-indigo-600">
-                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                     <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
                 </svg>
             }
         >
             <form onSubmit={handleSubmit} className="px-6 py-5 space-y-5">
                 <input type="hidden" name="intent" value="add_zone" />
+                <input type="hidden" name="domain" value={selectedZoneObj?.name || ""} />
 
                 <div className="bg-gray-50/50 border border-gray-100 rounded-md p-5 space-y-5 transition-all hover:bg-white hover:shadow-sm">
                     <p className={sectionLabelCls}>Zone Identity</p>
@@ -97,7 +102,14 @@ export function AddZone({ onClose, accounts, onRefresh }: {
                         </div>
                         <div>
                             <label className={labelCls}>Select Domain (Zone ID) <span className="text-rose-500">*</span></label>
-                            <select name="cfZoneId" required className={inputCls} disabled={!selectedAccount || isFetchingZones}>
+                            <select
+                                name="cfZoneId"
+                                required
+                                className={inputCls}
+                                disabled={!selectedAccount || isFetchingZones}
+                                value={selectedZoneId}
+                                onChange={(e) => setSelectedZoneId(e.target.value)}
+                            >
                                 <option value="">{isFetchingZones ? "Discovering zones..." : discoveredZones.length > 0 ? "Select domain..." : "Pick an account first"}</option>
                                 {discoveredZones.map((z: any) => (
                                     <option key={z.id} value={z.id}>

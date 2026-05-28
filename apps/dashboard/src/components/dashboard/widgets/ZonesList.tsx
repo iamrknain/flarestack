@@ -45,7 +45,20 @@ export function ZonesList({ zones, accounts, rules, onAddZone, onAddRule }: {
         <div className="lg:col-span-2 bg-white border border-gray-200 rounded-md shadow-sm overflow-hidden">
             <div className="px-6 py-4 border-b border-gray-100 bg-gray-50/50 flex items-center justify-between">
                 <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider">Monitored Zones</h2>
-                <span className="text-[10px] font-black text-slate-800 uppercase tracking-widest bg-slate-100 px-3 py-1 rounded-full">{zones.length} Protected</span>
+                <div className="flex items-center gap-3">
+                    <span className="text-[10px] font-black text-slate-800 uppercase tracking-widest bg-slate-100 px-3 py-1 rounded-full">{zones.length} Protected</span>
+                    {accounts.length > 0 && (
+                        <button
+                            onClick={onAddZone}
+                            className="flex items-center gap-1.5 text-xs font-semibold text-indigo-600 hover:text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-3 py-1 rounded-md transition-all shadow-sm"
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+                            </svg>
+                            Add Zone
+                        </button>
+                    )}
+                </div>
             </div>
 
             <div className="divide-y divide-gray-100">
@@ -102,7 +115,14 @@ export function ZonesList({ zones, accounts, rules, onAddZone, onAddRule }: {
                                             </button>
                                         </form>
 
-                                        <h3 className="text-xl font-black text-slate-900 tracking-tight truncate shrink-0">{zone.name}</h3>
+                                        <div className="flex items-baseline gap-2 shrink-0 max-w-[50%]">
+                                            <h3 className="text-xl font-black text-slate-900 tracking-tight truncate">{zone.name}</h3>
+                                            {zone.domain && (
+                                                <span className="text-xs text-slate-400 font-mono tracking-tight font-medium shrink-0">
+                                                    ({zone.domain})
+                                                </span>
+                                            )}
+                                        </div>
 
                                         <div className="flex items-center gap-2 shrink-0 flex-wrap">
                                             <span className="text-[10px] font-black text-slate-500 tracking-wider bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200/50">{account?.label || "Unknown Account"}</span>

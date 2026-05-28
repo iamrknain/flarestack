@@ -1,6 +1,7 @@
 import { RULES_MANIFEST, type RuleType } from "@flarestack/rules";
 import type { ReactNode } from "react";
 import { AddIpToList } from "~/components/dashboard/modals/rules/AddIpToList";
+import { UnderAttackMode } from "@/components/dashboard/modals/rules/UnderAttackMode";
 
 export { type RuleType };
 
@@ -82,6 +83,74 @@ const UI_DECORATIONS: Record<RuleType, RuleUIDefinition> = {
         enabled: false,
         tag: "Coming Soon",
         tagClasses: "bg-blue-100 text-blue-700 border-blue-200",
+    },
+    'under_attack_mode': {
+        icon: (
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-rose-600">
+                <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
+            </svg>
+        ),
+        enabled: true,
+        tag: "Available",
+        tagClasses: "bg-rose-100 text-rose-700 border-rose-200",
+        addComponent: UnderAttackMode,
+        renderDetails: (rule, config) => (
+            <div className="flex items-center gap-3 flex-1 min-w-0 flex-wrap sm:flex-nowrap">
+                <span className="text-sm font-black text-slate-900 truncate shrink-0 max-w-[180px]" title={rule.name}>
+                    {rule.name}
+                </span>
+                <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest border border-slate-100 px-1.5 py-0.5 rounded-md flex-shrink-0">
+                    {config.name}
+                </span>
+                <div className="w-1 h-1 rounded-full bg-slate-300 flex-shrink-0 hidden sm:block" />
+                <div className="flex items-center gap-1 bg-rose-50 px-2 py-0.5 rounded-md border border-rose-100 shrink-0">
+                    <span className="text-[11px] text-rose-700 font-black tracking-tight">{rule.rateLimitThreshold?.toLocaleString()}</span>
+                    <span className="text-[10px] text-rose-600/70 font-bold uppercase tracking-tighter">On Trigger</span>
+                </div>
+                {rule.autoOff ? (
+                    <>
+                        <div className="w-1 h-1 rounded-full bg-slate-300 flex-shrink-0 hidden sm:block" />
+                        <div className="flex items-center gap-1 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-100 shrink-0">
+                            <span className="text-[11px] text-emerald-700 font-black tracking-tight">{rule.offThreshold?.toLocaleString()}</span>
+                            <span className="text-[10px] text-emerald-600/70 font-bold uppercase tracking-tighter">Off Trigger</span>
+                        </div>
+                        <div className="w-1 h-1 rounded-full bg-slate-300 flex-shrink-0 hidden sm:block" />
+                        <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider shrink-0">Reverts to {rule.recoveryLevel}</span>
+                    </>
+                ) : (
+                    <>
+                        <div className="w-1 h-1 rounded-full bg-slate-300 flex-shrink-0 hidden sm:block" />
+                        <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider shrink-0">Manual Recovery</span>
+                    </>
+                )}
+                {rule.sendNotification && rule.notifyEmails && (
+                    <>
+                        <div className="w-1 h-1 rounded-full bg-slate-300 flex-shrink-0 hidden sm:block" />
+                        <div className="flex items-center gap-1 bg-sky-50 px-2 py-0.5 rounded-md border border-sky-100 shrink-0">
+                            <span className="text-[9px] text-sky-700 font-bold uppercase tracking-tighter">Mail:</span>
+                            <span className="text-[10px] text-sky-600 font-bold max-w-[120px] truncate" title={rule.notifyEmails}>{rule.notifyEmails}</span>
+                        </div>
+                    </>
+                )}
+                <div className="w-1 h-1 rounded-full bg-slate-300 flex-shrink-0 hidden sm:block" />
+                <span className="text-[10px] text-slate-400 font-bold uppercase tracking-widest italic shrink-0">{rule.windowSeconds}s Window</span>
+            </div>
+        ),
+        prepareValues: (formData: FormData) => {
+            const autoOff = formData.get("autoOff") === "true";
+            const sendNotification = formData.get("sendNotification") === "true";
+            return {
+                name: formData.get("name") as string,
+                zoneConfigId: formData.get("zoneConfigId") as string,
+                rateLimitThreshold: parseInt(formData.get("rateLimitThreshold") as string) || 10000,
+                autoOff,
+                offThreshold: autoOff ? (parseInt(formData.get("offThreshold") as string) || 2000) : null,
+                recoveryLevel: autoOff ? (formData.get("recoveryLevel") as string || "medium") : "medium",
+                windowSeconds: parseInt(formData.get("windowSeconds") as string) || 300,
+                sendNotification,
+                notifyEmails: sendNotification ? (formData.get("notifyEmails") as string || null) : null,
+            };
+        }
     }
 };
 
