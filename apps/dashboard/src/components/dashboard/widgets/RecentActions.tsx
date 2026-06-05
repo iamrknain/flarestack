@@ -1,4 +1,4 @@
-export function RecentActions({ actions, isLive = false, zones = [] }: { actions: any[], isLive?: boolean, zones?: any[] }) {
+export function RecentActions({ actions, isLive = false, zones = [], vercelProjects = [] }: { actions: any[], isLive?: boolean, zones?: any[], vercelProjects?: any[] }) {
     const timeAgo = (dateInput: Date | string) => {
         const time = new Date(dateInput).getTime();
         const diff = Math.floor((Date.now() - time) / 1000);
@@ -28,33 +28,57 @@ export function RecentActions({ actions, isLive = false, zones = [] }: { actions
                 ) : (
                     actions.map((action) => {
                         const zoneName = zones.find(z => z.id === action.zoneConfigId)?.name || "";
+                        const projectName = vercelProjects.find(p => p.id === action.vercelProjectRef)?.name || "";
+                        const displayName = zoneName || projectName;
+                        const isError = action.actionTaken?.endsWith('_ERROR');
                         return (
-                            <div key={action.id} className="p-3 hover:bg-slate-50 transition-colors flex items-center justify-between gap-3 group">
+                            <div key={action.id} className={`p-3 hover:bg-slate-50 transition-colors flex items-center justify-between gap-3 group ${isError ? 'bg-rose-50/20' : ''}`}>
                                 <div className="flex items-center gap-2 sm:gap-4 overflow-hidden">
                                     <span className="text-[10px] font-bold text-slate-400 w-10 sm:w-12 shrink-0 text-right group-hover:text-slate-500 transition-colors whitespace-nowrap">
                                         {timeAgo(action.timestamp)} ago
                                     </span>
 
-                                    <span className="font-mono text-[11px] text-slate-700 font-bold px-1.5 py-0.5 bg-slate-100 rounded border border-slate-200 truncate max-w-[100px] sm:max-w-[140px]">
+                                    <span 
+                                        title={action.targetValue}
+                                        className={`font-mono text-[11px] font-bold px-1.5 py-0.5 rounded border truncate max-w-[100px] sm:max-w-[140px] ${
+                                            isError 
+                                                ? 'bg-rose-50 border-rose-200 text-rose-700' 
+                                                : 'bg-slate-100 border-slate-200 text-slate-700'
+                                        }`}
+                                    >
                                         {action.targetValue}
                                     </span>
 
-                                    {zoneName && (
+                                    {displayName && (
                                         <span className="text-[9px] font-bold text-slate-500 truncate max-w-[80px] hidden lg:inline-block">
-                                            {zoneName}
+                                            {displayName}
                                         </span>
                                     )}
 
-                                    <span className="text-[8px] sm:text-[9px] font-black text-indigo-600 uppercase tracking-widest bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-100 shrink-0 hidden sm:inline-block">
+                                    <span className={`text-[8px] sm:text-[9px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded border shrink-0 hidden sm:inline-block ${
+                                        isError 
+                                            ? 'text-rose-600 bg-rose-50 border-rose-100' 
+                                            : 'text-indigo-600 bg-indigo-50 border-indigo-100'
+                                    }`}>
                                         {action.actionTaken?.replace('_', ' ') || 'ACTION'}
                                     </span>
                                 </div>
 
                                 <div className="flex items-center gap-1 shrink-0 bg-white border border-slate-100 px-2 py-0.5 rounded-md shadow-sm">
-                                    <span className={`text-[11px] font-black tabular-nums tracking-tight ${action.requestCount ? 'bg-gradient-to-br from-slate-900 to-slate-700 bg-clip-text text-transparent' : 'text-slate-400'}`}>
-                                        {action.requestCount ? action.requestCount.toLocaleString() : '—'}
-                                    </span>
-                                    {action.requestCount && <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">Hits</span>}
+                                    {isError ? (
+                                        <span className="flex items-center text-rose-500 px-1 py-0.5" title="Rule execution error">
+                                            <svg className="w-3.5 h-3.5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                                                <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
+                                            </svg>
+                                        </span>
+                                    ) : (
+                                        <>
+                                            <span className={`text-[11px] font-black tabular-nums tracking-tight ${action.requestCount ? 'bg-gradient-to-br from-slate-900 to-slate-700 bg-clip-text text-transparent' : 'text-slate-400'}`}>
+                                                {action.requestCount ? action.requestCount.toLocaleString() : '—'}
+                                            </span>
+                                            {action.requestCount && <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">Hits</span>}
+                                        </>
+                                    )}
                                 </div>
                             </div>
                         );

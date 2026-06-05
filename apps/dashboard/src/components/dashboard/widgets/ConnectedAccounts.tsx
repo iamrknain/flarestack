@@ -2,10 +2,16 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { dashboardAction } from "~/app/dashboard/actions";
 
-export function ConnectedAccounts({ accounts, onAdd, error: initialError }: {
+export function ConnectedAccounts({
+    accounts,
+    onAdd,
+    error: initialError,
+    type = "cloudflare",
+}: {
     accounts: any[];
     onAdd: () => void;
     error?: string;
+    type?: "cloudflare" | "vercel";
 }) {
     const router = useRouter();
     const [error, setError] = useState(initialError || "");
@@ -15,13 +21,14 @@ export function ConnectedAccounts({ accounts, onAdd, error: initialError }: {
 
     const handleDelete = async (e: React.FormEvent, accountId: string, label: string) => {
         e.preventDefault();
-        if (!confirm(`Remove "${label}"?\n\nAny zones using this account must be removed first.`)) {
+        const resourceType = type === "cloudflare" ? "zones" : "projects";
+        if (!confirm(`Remove "${label}"?\n\nAny ${resourceType} using this account must be removed first.`)) {
             return;
         }
         setDeletingId(accountId);
         setError("");
         const fd = new FormData();
-        fd.append("intent", "delete_account");
+        fd.append("intent", type === "cloudflare" ? "delete_account" : "delete_vercel_account");
         fd.append("accountId", accountId);
         const res = await dashboardAction(fd);
         setDeletingId(null);
@@ -36,7 +43,7 @@ export function ConnectedAccounts({ accounts, onAdd, error: initialError }: {
         <div>
             <div className="flex items-center justify-between mb-4 px-1">
                 <h2 className="font-bold uppercase">
-                    Connected Cloudflare Accounts
+                    Connected {type === "cloudflare" ? "Cloudflare" : "Vercel"} Accounts
                 </h2>
             </div>
 
@@ -58,7 +65,19 @@ export function ConnectedAccounts({ accounts, onAdd, error: initialError }: {
                         <div className="flex items-center gap-3 px-4 py-2.5">
                             <span className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.3)] flex-shrink-0" />
                             <span className="text-sm font-bold text-slate-900">{account.label}</span>
-                            <span className="font-mono text-[10px] text-slate-400 font-bold uppercase tracking-tighter opacity-70 ml-1">{account.cfAccountId.slice(0, 8)}…</span>
+                            {type === "cloudflare" ? (
+                                <span className="font-mono text-[10px] text-slate-400 font-bold uppercase tracking-tighter opacity-70 ml-1">
+                                    {account.cfAccountId.slice(0, 8)}…
+                                </span>
+                            ) : account.vercelTeamId ? (
+                                <span className="font-mono text-[10px] text-slate-400 font-bold uppercase tracking-tighter opacity-70 ml-1">
+                                    {account.vercelTeamId.slice(0, 8)}…
+                                </span>
+                            ) : (
+                                <span className="font-mono text-[10px] text-slate-400 font-bold uppercase tracking-tighter opacity-70 ml-1">
+                                    Personal
+                                </span>
+                            )}
                         </div>
                         <form
                             onSubmit={(e) => handleDelete(e, account.id, account.label)}
@@ -84,7 +103,7 @@ export function ConnectedAccounts({ accounts, onAdd, error: initialError }: {
                     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
                         <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
                     </svg>
-                    Add Cloudflare Account
+                    Add {type === "cloudflare" ? "Cloudflare" : "Vercel"} Account
                 </button>
             </div>
         </div>

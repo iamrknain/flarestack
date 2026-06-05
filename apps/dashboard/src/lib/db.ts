@@ -1,3 +1,8 @@
+import dns from "node:dns";
+if (typeof dns.setDefaultResultOrder === "function") {
+  dns.setDefaultResultOrder("ipv4first");
+}
+
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "@flarestack/db/src/schema/index";
 
@@ -40,8 +45,12 @@ class CloudflareD1HttpClient {
   prepare(sql: string) {
     const self = this;
     return {
+      sql,
+      params: [] as any[],
       bind(...params: any[]) {
         return {
+          sql,
+          params,
           async all() {
             const result = await self.executeQuery({ sql, params });
             return { results: result[0]?.results || [], success: true };
@@ -80,15 +89,19 @@ class CloudflareD1HttpClient {
   }
 
   async batch(statements: any[]) {
-    const payload = statements.map((stmt) => ({
-      sql: stmt.sql,
-      params: stmt.params || [],
-    }));
-    const results = await this.executeQuery(payload);
+    const results = [];
+    for (const stmt of statements) {
+      const payload = {
+        sql: stmt.sql,
+        params: stmt.params || [],
+      };
+      const res = await this.executeQuery(payload);
+      results.push(res[0]);
+    }
     return results.map((res: any) => ({
-      results: res.results || [],
+      results: res?.results || [],
       success: true,
-      meta: res.meta || {},
+      meta: res?.meta || {},
     }));
   }
 }

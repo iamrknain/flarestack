@@ -4,10 +4,13 @@ import { useState, useEffect } from "react";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { AddAccount } from "~/components/dashboard/modals/AddAccount";
 import { AddZone } from "~/components/dashboard/modals/AddZone";
+import { AddVercelProject } from "~/components/dashboard/modals/AddVercelProject";
+import { AddVercelAccount } from "~/components/dashboard/modals/AddVercelAccount";
 import { RuleSelector } from "~/components/dashboard/modals/rules/RuleSelector";
 import { RULE_REGISTRY, type RuleType } from "~/lib/rules/registry";
 import { TopStatsExplorer } from "~/components/dashboard/views/TopStatsExplorer";
-import { Overview } from "~/components/dashboard/views/Overview";
+import { Cloudflare } from "~/components/dashboard/views/Cloudflare";
+import { Vercel } from "~/components/dashboard/views/Vercel";
 import { ActionLogs } from "~/components/dashboard/views/ActionLogs";
 import { Lists } from "~/components/dashboard/views/Lists";
 import { Profile } from "~/components/dashboard/views/Profile";
@@ -17,6 +20,8 @@ interface DashboardClientPageProps {
   user: any;
   accounts: any[];
   zones: any[];
+  vercelAccounts: any[];
+  vercelProjects: any[];
   rules: any[];
   recentActions: any[];
   totalBlocks: number;
@@ -27,6 +32,8 @@ export default function DashboardClientPage({
   user,
   accounts,
   zones,
+  vercelAccounts,
+  vercelProjects,
   rules,
   recentActions,
   totalBlocks,
@@ -38,7 +45,10 @@ export default function DashboardClientPage({
 
   const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
   const [isZoneModalOpen, setIsZoneModalOpen] = useState(false);
+  const [isVercelProjectModalOpen, setIsVercelProjectModalOpen] = useState(false);
+  const [isVercelAccountModalOpen, setIsVercelAccountModalOpen] = useState(false);
   const [ruleModalZoneId, setRuleModalZoneId] = useState<string | null>(null);
+  const [ruleModalTargetType, setRuleModalTargetType] = useState<'zone' | 'vercel'>('zone');
   const [selectedRuleType, setSelectedRuleType] = useState<string | null>(null);
   const [isPaused, setIsPaused] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -220,7 +230,7 @@ export default function DashboardClientPage({
 
   return (
     <div className="pb-8">
-      {accounts.length === 0 && (
+      {accounts.length === 0 && currentTab === "cloudflare" && (
         <div className="mb-8 flex items-center gap-4 p-4 bg-amber-50 border border-amber-200 rounded-md">
           <div className="w-9 h-9 rounded-md bg-amber-100 flex items-center justify-center flex-shrink-0">
             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-amber-600">
@@ -237,8 +247,25 @@ export default function DashboardClientPage({
         </div>
       )}
 
-      {currentTab === "overview" && (
-        <Overview
+      {vercelAccounts.length === 0 && currentTab === "vercel" && (
+        <div className="mb-8 flex items-center gap-4 p-4 bg-amber-50 border border-amber-200 rounded-md">
+          <div className="w-9 h-9 rounded-md bg-amber-100 flex items-center justify-center flex-shrink-0">
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-amber-600">
+              <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
+            </svg>
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-amber-800">No Vercel account connected</p>
+            <p className="text-xs text-amber-700 mt-0.5">Connect a Vercel account before adding projects.</p>
+          </div>
+          <button onClick={() => setIsVercelAccountModalOpen(true)} className="flex-shrink-0 px-4 py-2 text-sm font-medium text-amber-800 bg-amber-100 hover:bg-amber-200 rounded-md transition-colors">
+            Connect Account
+          </button>
+        </div>
+      )}
+
+      {currentTab === "cloudflare" && (
+        <Cloudflare
           dateRange={dateRange}
           onDateRangeChange={setDateRange}
           isLoading={isLoading}
@@ -247,12 +274,34 @@ export default function DashboardClientPage({
           rules={rules}
           recentActions={recentActions}
           totalBlocks={totalBlocks}
-          limit={limit}
-          onLimitChange={setLimit}
           onRefresh={handleRefresh}
           onAddAccount={() => setIsAccountModalOpen(true)}
           onAddZone={() => setIsZoneModalOpen(true)}
-          onAddRule={(zoneId: string) => setRuleModalZoneId(zoneId)}
+          onAddRule={(zoneId: string) => {
+            setRuleModalZoneId(zoneId);
+            setRuleModalTargetType('zone');
+          }}
+          error={undefined}
+        />
+      )}
+
+      {currentTab === "vercel" && (
+        <Vercel
+          dateRange={dateRange}
+          onDateRangeChange={setDateRange}
+          isLoading={isLoading}
+          vercelAccounts={vercelAccounts}
+          vercelProjects={vercelProjects}
+          rules={rules}
+          recentActions={recentActions}
+          totalBlocks={totalBlocks}
+          onRefresh={handleRefresh}
+          onAddVercelAccount={() => setIsVercelAccountModalOpen(true)}
+          onAddVercelProject={() => setIsVercelProjectModalOpen(true)}
+          onAddVercelRule={(projectId: string) => {
+            setRuleModalZoneId(projectId);
+            setRuleModalTargetType('vercel');
+          }}
         />
       )}
 
@@ -317,10 +366,26 @@ export default function DashboardClientPage({
         />
       )}
 
+      {isVercelProjectModalOpen && (
+        <AddVercelProject
+          onClose={() => setIsVercelProjectModalOpen(false)}
+          accounts={vercelAccounts}
+          onRefresh={handleRefresh}
+        />
+      )}
+
+      {isVercelAccountModalOpen && (
+        <AddVercelAccount
+          onClose={() => setIsVercelAccountModalOpen(false)}
+          onRefresh={handleRefresh}
+        />
+      )}
+
       {ruleModalZoneId && !selectedRuleType && (
         <RuleSelector
           onClose={() => setRuleModalZoneId(null)}
           onSelect={(type: RuleType) => setSelectedRuleType(type)}
+          targetType={ruleModalTargetType}
         />
       )}
 

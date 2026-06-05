@@ -1,48 +1,45 @@
 import { ConnectedAccounts } from "../widgets/ConnectedAccounts";
 import { MetricsGrid } from "../widgets/MetricsGrid";
-import { ZonesList } from "../widgets/ZonesList";
-import { DateRangePicker, type DateRange } from "~/components/shared/DateRangePicker";
+import { VercelProjectsList } from "../widgets/VercelProjectsList";
+import { DateRangePicker } from "~/components/shared/DateRangePicker";
 import { RecentActions } from "../widgets/RecentActions";
 
-interface OverviewProps {
+interface VercelProps {
     dateRange: any;
     onDateRangeChange: (v: any) => void;
     isLoading?: boolean;
-    accounts: any[];
-    zones: any[];
+    vercelAccounts: any[];
+    vercelProjects: any[];
     rules: any[];
     recentActions: any[];
     totalBlocks: number;
-    limit: number;
-    onLimitChange: (v: number) => void;
     onRefresh: () => void;
-    onAddAccount: () => void;
-    onAddZone: () => void;
-    onAddRule: (zoneId: string) => void;
-    error?: string;
+    onAddVercelAccount: () => void;
+    onAddVercelProject: () => void;
+    onAddVercelRule: (projectId: string) => void;
 }
 
-export function Overview({
+export function Vercel({
     dateRange,
     onDateRangeChange,
     isLoading,
-    accounts,
-    zones,
+    vercelAccounts,
+    vercelProjects,
     rules,
     recentActions,
     totalBlocks,
-    limit,
-    onLimitChange,
     onRefresh,
-    onAddAccount,
-    onAddZone,
-    onAddRule,
-    error
-}: OverviewProps) {
+    onAddVercelAccount,
+    onAddVercelProject,
+    onAddVercelRule
+}: VercelProps) {
+    const vercelActions = recentActions.filter(a => a.vercelProjectRef);
+    const vercelRuleTypes = ["vercel_under_attack_mode", "vercel_bot_protection"];
+    const vercelActiveRules = rules.filter(r => vercelRuleTypes.includes(r.type) && r.isActive);
+
     return (
         <div className="flex flex-col gap-4 sm:gap-6">
             <header className="sticky top-0 z-20 bg-white/95 backdrop-blur-md border-b border-slate-200/60 px-3 sm:px-4 py-3 flex flex-row flex-wrap gap-2 items-center w-full">
-                {/* Main controls (pushed left) */}
                 <div className="shrink-0 flex items-center gap-2">
                     <DateRangePicker
                         value={dateRange}
@@ -63,7 +60,6 @@ export function Overview({
                     )}
                 </div>
 
-                {/* Fetch + Control Actions */}
                 <div className="ml-auto flex items-center gap-2">
                     <button
                         onClick={onRefresh}
@@ -86,43 +82,45 @@ export function Overview({
                     <div className="w-px h-6 bg-slate-200 mx-1 hidden sm:block" />
 
                     <button
-                        onClick={onAddZone}
-                        disabled={accounts.length === 0}
+                        onClick={onAddVercelProject}
+                        disabled={vercelAccounts.length === 0}
                         className="flex items-center justify-center gap-1.5 bg-slate-950 text-white text-[10px] font-bold px-3 h-[34px] rounded-md hover:bg-black transition-all shadow-sm active:scale-95 disabled:opacity-30 whitespace-nowrap"
                     >
                         <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
                             <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
                         </svg>
-                        Add Zone
+                        Add Project
                     </button>
                 </div>
             </header>
 
             <div className="px-3 sm:px-4 flex flex-col gap-6 w-full pb-8">
                 <ConnectedAccounts
-                    accounts={accounts}
-                    onAdd={onAddAccount}
-                    error={error}
+                    accounts={vercelAccounts}
+                    onAdd={onAddVercelAccount}
+                    type="vercel"
                 />
 
                 <MetricsGrid
-                    zonesCount={zones.length}
+                    count={vercelProjects.length}
                     totalBlocks={totalBlocks}
-                    activeRulesCount={rules.filter((r: any) => r.isActive).length}
+                    activeRulesCount={vercelActiveRules.length}
                     rangeLabel={dateRange.type === "all" ? "All Time" : (dateRange.type === "relative" ? `Last ${dateRange.relativeValue}` : "Custom Range")}
+                    type="vercel"
                 />
 
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                    <ZonesList
-                        zones={zones}
-                        accounts={accounts}
-                        rules={rules}
-                        onAddZone={onAddZone}
-                        onAddRule={onAddRule}
-                    />
+                    <div className="lg:col-span-2 space-y-6">
+                        <VercelProjectsList
+                            projects={vercelProjects}
+                            rules={rules}
+                            onAddProject={onAddVercelProject}
+                            onAddRule={onAddVercelRule}
+                        />
+                    </div>
                     <div className="relative w-full h-full min-h-[400px]">
                         <div className="absolute inset-0">
-                            <RecentActions actions={recentActions} isLive={dateRange.live} zones={zones} />
+                            <RecentActions actions={vercelActions} isLive={dateRange.live} vercelProjects={vercelProjects} />
                         </div>
                     </div>
                 </div>

@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "pnpm -r run dev",
     "//stop": "Use 'pnpm stop' when closing the terminal tab (instead of Ctrl+C) leaves orphan dev servers holding ports 5173, 8787, or 9229. Ctrl+C in the same terminal sends SIGINT to the whole process group and kills everything cleanly — but closing the tab only kills pnpm, leaving grandchild node/wrangler processes running as orphans.",
-    "stop": "fuser -k 9229/tcp 5173/tcp 8787/tcp || true",
+    "stop": "fuser -k 9229/tcp 5173/tcp 8787/tcp 3000/tcp || true",
     "setup": "bash scripts/setup-local.sh",
     "clean": "bash scripts/clean.sh",
     "nuke:db": "bash scripts/nuke-db.sh",
@@ -14,6 +14,7 @@
     "db:migrate": "wrangler d1 migrations apply flarestack-db --local --config apps/worker/wrangler.jsonc --persist-to .wrangler/state",
     "db:migrate:remote": "wrangler d1 migrations apply flarestack-db --remote --config apps/worker/wrangler.jsonc",
     "deploy-worker": "node scripts/deploy-worker.js",
+    "simulate-traffic": "node scripts/simulate-traffic.js",
     "build": "pnpm -r run build",
     "test": "pnpm -r run test",
     "typecheck": "pnpm -r run typecheck"

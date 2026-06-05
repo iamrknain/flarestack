@@ -94,10 +94,22 @@ export class UnderAttackModeRule implements RuleHandler {
             }
             log(`  Zone-wide traffic: ${totalRequests} request(s) in the last ${ruleWindowSeconds}s.`);
         } catch (err) {
+            const errMsg = err instanceof Error ? err.message : String(err);
             console.error(
                 `  Failed to query total traffic for rule ${rule.id} on zone ${zone.name}:`,
-                err instanceof Error ? err.message : err
+                errMsg
             );
+            await actionLogger.logActions([{
+                userId: zone.userId,
+                zoneConfigId: zone.id,
+                ruleId: rule.id,
+                actionTaken: 'UNDER_ATTACK_MODE_ERROR',
+                targetType: 'API_ERROR',
+                targetValue: 'Traffic query failed',
+                requestCount: null,
+                metadata: JSON.stringify({ error: errMsg }),
+                timestamp: new Date()
+            }]);
             return;
         }
 
@@ -107,10 +119,22 @@ export class UnderAttackModeRule implements RuleHandler {
             currentSecurityLevel = await cf.zones.getSecurityLevel(zone.cfZoneId);
             log(`  Current security level: "${currentSecurityLevel}".`);
         } catch (err) {
+            const errMsg = err instanceof Error ? err.message : String(err);
             console.error(
                 `  Failed to query current security level for zone ${zone.name}:`,
-                err instanceof Error ? err.message : err
+                errMsg
             );
+            await actionLogger.logActions([{
+                userId: zone.userId,
+                zoneConfigId: zone.id,
+                ruleId: rule.id,
+                actionTaken: 'UNDER_ATTACK_MODE_ERROR',
+                targetType: 'API_ERROR',
+                targetValue: errMsg.substring(0, 100),
+                requestCount: null,
+                metadata: JSON.stringify({ error: errMsg }),
+                timestamp: new Date()
+            }]);
             return;
         }
 
@@ -184,10 +208,22 @@ export class UnderAttackModeRule implements RuleHandler {
                         await sendEmailNotification({ env, to: notifyEmails, subject, html });
                     }
                 } catch (err) {
+                    const errMsg = err instanceof Error ? err.message : String(err);
                     console.error(
                         `  Failed to enable Under Attack Mode for zone ${zone.name}:`,
-                        err instanceof Error ? err.message : err
+                        errMsg
                     );
+                    await actionLogger.logActions([{
+                        userId: zone.userId,
+                        zoneConfigId: zone.id,
+                        ruleId: rule.id,
+                        actionTaken: 'UNDER_ATTACK_MODE_ERROR',
+                        targetType: 'API_ERROR',
+                        targetValue: 'Activation failed',
+                        requestCount: totalRequests,
+                        metadata: JSON.stringify({ error: errMsg }),
+                        timestamp: new Date()
+                    }]);
                 }
             } else {
                 log(`  Zone is already in under_attack mode. No action needed.`);
@@ -266,10 +302,22 @@ export class UnderAttackModeRule implements RuleHandler {
                         await sendEmailNotification({ env, to: notifyEmails, subject, html });
                     }
                 } catch (err) {
+                    const errMsg = err instanceof Error ? err.message : String(err);
                     console.error(
                         `  Failed to restore security level for zone ${zone.name}:`,
-                        err instanceof Error ? err.message : err
+                        errMsg
                     );
+                    await actionLogger.logActions([{
+                        userId: zone.userId,
+                        zoneConfigId: zone.id,
+                        ruleId: rule.id,
+                        actionTaken: 'UNDER_ATTACK_MODE_ERROR',
+                        targetType: 'API_ERROR',
+                        targetValue: 'Deactivation failed',
+                        requestCount: totalRequests,
+                        metadata: JSON.stringify({ error: errMsg }),
+                        timestamp: new Date()
+                    }]);
                 }
             } else {
                 log(`  Traffic is normal and security level is already "${currentSecurityLevel}".`);

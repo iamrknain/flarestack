@@ -4,6 +4,7 @@ import { headers } from "next/headers";
 import { getDb } from "~/lib/db";
 import { getAuth } from "~/lib/auth";
 import { cloudflareAccounts, zoneConfigs, addIpToListRules, actionLogs } from "@flarestack/db/src/schema/zones";
+import { vercelAccounts, vercelProjects, vercelUnderAttackRules, vercelBotProtectionRules } from "@flarestack/db/src/schema/vercel";
 import { entityCache } from "@flarestack/db/src/schema/cache";
 import { and, eq, inArray } from "drizzle-orm";
 import { RULE_REGISTRY } from "~/lib/rules/registry";
@@ -219,6 +220,127 @@ export async function dashboardAction(formData: FormData) {
         });
       }
       return { success: true, redirect: "/dashboard/profile" };
+    }
+
+    if (intent === "add_vercel_account") {
+      const label = formData.get("label") as string;
+      const vercelToken = formData.get("vercelToken") as string;
+      const vercelTeamId = formData.get("vercelTeamId") as string;
+
+      if (!label || !vercelToken) {
+        return { error: "Label and Token are required." };
+      }
+
+      // Verify the Vercel API token
+      try {
+        const url = vercelTeamId 
+          ? `https://api.vercel.com/v9/projects?teamId=${vercelTeamId}` 
+          : "https://api.vercel.com/v9/projects";
+        const verifyRes = await fetch(url, {
+          headers: { Authorization: `Bearer ${vercelToken}` },
+        });
+        if (!verifyRes.ok) {
+          return { error: `Invalid Vercel API Token or Team ID. Vercel returned HTTP ${verifyRes.status}` };
+        }
+      } catch (err) {
+        const errMsg = err instanceof Error ? err.message : "Unknown error";
+        return { error: `Could not reach Vercel to verify the token: ${errMsg}` };
+      }
+
+      await db.insert(vercelAccounts).values({
+        id: crypto.randomUUID(),
+        userId,
+        label,
+        vercelToken,
+        vercelTeamId: vercelTeamId || null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+      return { success: true };
+    }
+
+    if (intent === "delete_vercel_account") {
+      const accountId = formData.get("accountId") as string;
+      if (accountId) {
+        // Refuse if any projects reference this account
+        const dependentProjects = await db
+          .select()
+          .from(vercelProjects)
+          .where(and(eq(vercelProjects.vercelAccountRef as any, accountId), eq(vercelProjects.userId as any, userId)) as any);
+        if (dependentProjects.length > 0) {
+          return { error: `Cannot delete — ${dependentProjects.length} project(s) still use this account. Remove those projects first.` };
+        }
+        await db
+          .delete(vercelAccounts)
+          .where(and(eq(vercelAccounts.id as any, accountId), eq(vercelAccounts.userId as any, userId)) as any);
+      }
+      return { success: true };
+    }
+
+    if (intent === "add_vercel_project") {
+      const name = formData.get("name") as string;
+      const vercelProjectId = formData.get("vercelProjectId") as string;
+      const vercelAccountRef = formData.get("vercelAccountRef") as string;
+      const domain = formData.get("domain") as string;
+
+      if (!name || !vercelProjectId || !vercelAccountRef) {
+        return { error: "Name, Project ID, and Vercel Account are required." };
+      }
+
+      await db.insert(vercelProjects).values({
+        id: crypto.randomUUID(),
+        userId,
+        vercelAccountRef,
+        name,
+        vercelProjectId,
+        domain: domain || null,
+        isActive: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+      return { success: true };
+    }
+
+    if (intent === "delete_vercel_project") {
+      const projectId = formData.get("projectId") as string;
+      if (projectId) {
+        await db.transaction(async (tx: any) => {
+          // Delete action logs referencing this project
+          await tx.delete(actionLogs).where(and(eq(actionLogs.vercelProjectRef as any, projectId), eq(actionLogs.userId as any, userId)) as any);
+          
+          // Delete Vercel rules
+          await tx.delete(vercelUnderAttackRules).where(and(eq(vercelUnderAttackRules.vercelProjectRef as any, projectId), eq(vercelUnderAttackRules.userId as any, userId)) as any);
+          await tx.delete(vercelBotProtectionRules).where(and(eq(vercelBotProtectionRules.vercelProjectRef as any, projectId), eq(vercelBotProtectionRules.userId as any, userId)) as any);
+          
+          // Delete project
+          await tx.delete(vercelProjects).where(and(eq(vercelProjects.id as any, projectId), eq(vercelProjects.userId as any, userId)) as any);
+        });
+      }
+      return { success: true };
+    }
+
+    if (intent === "toggle_vercel_project_status") {
+      const projectId = formData.get("projectId") as string;
+      const isActive = formData.get("isActive") === "true";
+      if (projectId) {
+        await db.transaction(async (tx: any) => {
+          await tx
+            .update(vercelProjects)
+            .set({ isActive, updatedAt: new Date() })
+            .where(and(eq(vercelProjects.id as any, projectId), eq(vercelProjects.userId as any, userId)) as any);
+
+          await tx
+            .update(vercelUnderAttackRules)
+            .set({ isActive, updatedAt: new Date() })
+            .where(and(eq(vercelUnderAttackRules.vercelProjectRef as any, projectId), eq(vercelUnderAttackRules.userId as any, userId)) as any);
+
+          await tx
+            .update(vercelBotProtectionRules)
+            .set({ isActive, updatedAt: new Date() })
+            .where(and(eq(vercelBotProtectionRules.vercelProjectRef as any, projectId), eq(vercelBotProtectionRules.userId as any, userId)) as any);
+        });
+      }
+      return { success: true };
     }
 
     return { error: "Unknown intent: " + intent };

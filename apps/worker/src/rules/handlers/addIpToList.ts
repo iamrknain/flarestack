@@ -46,7 +46,19 @@ export class AddIpToListRule implements RuleHandler {
                     .filter(r => r.count > rateLimitThreshold)
                     .map(r => ({ ip: String(r['clientIP']), count: r.count as number }));
             } catch (err) {
-                console.error(`  Failed to query abusive IPs for rule ${rule.id} on zone ${zone.name}:`, err instanceof Error ? err.message : err);
+                const errMsg = err instanceof Error ? err.message : String(err);
+                console.error(`  Failed to query abusive IPs for rule ${rule.id} on zone ${zone.name}:`, errMsg);
+                await actionLogger.logActions([{
+                    userId: zone.userId,
+                    zoneConfigId: zone.id,
+                    ruleId: rule.id,
+                    actionTaken: 'IP_ADDED_TO_LIST_ERROR',
+                    targetType: 'API_ERROR',
+                    targetValue: 'Abusive IPs query failed',
+                    requestCount: null,
+                    metadata: JSON.stringify({ error: errMsg }),
+                    timestamp: new Date()
+                }]);
                 return;
             }
         }
@@ -74,7 +86,19 @@ export class AddIpToListRule implements RuleHandler {
                 cached = new Set(liveIps);
                 log(`  Cache populated with ${cached.size} existing IP(s).`);
             } catch (err) {
-                console.error(`  Failed to fetch live list for ${cfListId}:`, err instanceof Error ? err.message : err);
+                const errMsg = err instanceof Error ? err.message : String(err);
+                console.error(`  Failed to fetch live list for ${cfListId}:`, errMsg);
+                await actionLogger.logActions([{
+                    userId: zone.userId,
+                    zoneConfigId: zone.id,
+                    ruleId: rule.id,
+                    actionTaken: 'IP_ADDED_TO_LIST_ERROR',
+                    targetType: 'API_ERROR',
+                    targetValue: errMsg.substring(0, 100),
+                    requestCount: null,
+                    metadata: JSON.stringify({ error: errMsg }),
+                    timestamp: new Date()
+                }]);
                 return;
             }
         }
@@ -104,10 +128,22 @@ export class AddIpToListRule implements RuleHandler {
         try {
             operationId = await cf.lists.addItems(cfListId, payload);
         } catch (err) {
+            const errMsg = err instanceof Error ? err.message : String(err);
             // Unexpected failure — re-sync cache from CF, then abort.
             // A duplicate error here would be a cache bug; any other error is
             // an auth/network issue. Either way, refreshing the cache is correct.
-            console.error(`  CF list add failed for rule ${rule.id}:`, err instanceof Error ? err.message : err);
+            console.error(`  CF list add failed for rule ${rule.id}:`, errMsg);
+            await actionLogger.logActions([{
+                userId: zone.userId,
+                zoneConfigId: zone.id,
+                ruleId: rule.id,
+                actionTaken: 'IP_ADDED_TO_LIST_ERROR',
+                targetType: 'API_ERROR',
+                targetValue: 'List update failed',
+                requestCount: newItems.length,
+                metadata: JSON.stringify({ error: errMsg }),
+                timestamp: new Date()
+            }]);
             try {
                 const liveItems = await cf.lists.getItems(cfListId);
                 const liveIps = liveItems.map(i => i.ip).filter((ip): ip is string => !!ip);

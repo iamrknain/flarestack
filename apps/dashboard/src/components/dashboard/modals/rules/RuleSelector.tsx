@@ -1,11 +1,18 @@
 import { ModalShell } from "../../ui/shared";
 import { RULE_REGISTRY, type RuleType } from "~/lib/rules/registry";
 
-export function RuleSelector({ onClose, onSelect }: {
+export function RuleSelector({ onClose, onSelect, targetType = 'zone' }: {
     onClose: () => void;
     onSelect: (type: RuleType) => void;
+    targetType?: 'zone' | 'vercel';
 }) {
-    const availableRules = Object.values(RULE_REGISTRY);
+    const availableRules = Object.values(RULE_REGISTRY).filter(r => {
+        if (targetType === 'vercel') {
+            return r.type.startsWith('vercel_');
+        } else {
+            return !r.type.startsWith('vercel_');
+        }
+    });
 
     return (
         <ModalShell

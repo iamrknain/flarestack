@@ -1,6 +1,7 @@
 import { addIpToListRules, underAttackRules } from "@flarestack/db/src/schema/zones";
+import { vercelUnderAttackRules, vercelBotProtectionRules } from "@flarestack/db/src/schema/vercel";
 
-export type RuleType = "add_ip_to_list" | "js_challenge" | "block_country" | "under_attack_mode";
+export type RuleType = "add_ip_to_list" | "js_challenge" | "block_country" | "under_attack_mode" | "vercel_under_attack_mode" | "vercel_bot_protection";
 
 export interface RuleBaseConfig {
     type: RuleType;
@@ -16,7 +17,7 @@ export interface RuleBaseConfig {
      * Expected shape: a Drizzle table with at minimum these columns:
      *   - `id`            (text, primary key)
      *   - `userId`        (text, FK to user)
-     *   - `zoneConfigId`  (text, FK to zone)
+     *   - `zoneConfigId`  (text, FK to zone) or `vercelProjectRef` (text, FK to project)
      *   - `isActive`      (boolean)
      *
      * Keep column names consistent across all rule tables — mismatches will
@@ -50,5 +51,17 @@ export const RULES_MANIFEST: Record<RuleType, RuleBaseConfig> = {
         name: "Auto Under Attack Mode",
         description: "Automatically enables Cloudflare Under Attack Mode when traffic spikes, and disables it when traffic normalizes.",
         table: underAttackRules
+    },
+    'vercel_under_attack_mode': {
+        type: 'vercel_under_attack_mode',
+        name: "Vercel Auto Attack Mode",
+        description: "Automatically enables Vercel Under Attack Mode when direct traffic spikes, and disables it when traffic normalizes.",
+        table: vercelUnderAttackRules
+    },
+    'vercel_bot_protection': {
+        type: 'vercel_bot_protection',
+        name: "Vercel Bot Protection",
+        description: "Automatically enables Vercel Firewall/Bot Protection when direct traffic spikes, and disables it when traffic normalizes.",
+        table: vercelBotProtectionRules
     }
 };

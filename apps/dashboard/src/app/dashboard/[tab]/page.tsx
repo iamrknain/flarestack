@@ -4,6 +4,7 @@ import { desc, eq, sql, and, gte, lte } from "drizzle-orm";
 import { getAuth } from "~/lib/auth";
 import { getDb } from "~/lib/db";
 import { cloudflareAccounts, zoneConfigs, actionLogs } from "@flarestack/db/src/schema/zones";
+import { vercelAccounts, vercelProjects } from "@flarestack/db/src/schema/vercel";
 import { RULE_REGISTRY } from "~/lib/rules/registry";
 import DashboardClientPage from "~/components/dashboard/DashboardClientPage";
 
@@ -23,9 +24,9 @@ export default async function DashboardTabPage({ params, searchParams }: PagePro
   const { tab } = await params;
   const resolvedSearchParams = await searchParams;
 
-  const allowedTabs = ["overview", "ips", "logs", "lists", "profile"];
+  const allowedTabs = ["cloudflare", "vercel", "ips", "logs", "lists", "profile"];
   if (!allowedTabs.includes(tab)) {
-    redirect("/dashboard/overview");
+    redirect("/dashboard/cloudflare");
   }
 
   const auth = getAuth();
@@ -73,6 +74,8 @@ export default async function DashboardTabPage({ params, searchParams }: PagePro
   const [
     accountsResult,
     zonesResult,
+    vercelAccountsResult,
+    vercelProjectsResult,
     recentActionsResult,
     countResult,
     ...ruleResults
@@ -87,6 +90,16 @@ export default async function DashboardTabPage({ params, searchParams }: PagePro
       .from(zoneConfigs)
       .where(eq(zoneConfigs.userId as any, userId))
       .orderBy(desc(zoneConfigs.createdAt)),
+    db
+      .select()
+      .from(vercelAccounts)
+      .where(eq(vercelAccounts.userId as any, userId))
+      .orderBy(desc(vercelAccounts.createdAt)),
+    db
+      .select()
+      .from(vercelProjects)
+      .where(eq(vercelProjects.userId as any, userId))
+      .orderBy(desc(vercelProjects.createdAt)),
     db
       .select()
       .from(actionLogs)
@@ -118,6 +131,8 @@ export default async function DashboardTabPage({ params, searchParams }: PagePro
       user={sessionData.user}
       accounts={accountsResult}
       zones={zonesResult}
+      vercelAccounts={vercelAccountsResult}
+      vercelProjects={vercelProjectsResult}
       rules={rules}
       recentActions={recentActionsResult}
       totalBlocks={totalBlocks}

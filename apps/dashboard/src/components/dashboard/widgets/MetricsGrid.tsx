@@ -1,5 +1,6 @@
-export function MetricsGrid({ zonesCount, activeRulesCount }: { zonesCount: number; totalBlocks: number; activeRulesCount: number; rangeLabel?: string }) {
-    const isActive = zonesCount > 0 && activeRulesCount > 0;
+export function MetricsGrid({ count, activeRulesCount, type = 'zone' }: { count: number; totalBlocks: number; activeRulesCount: number; rangeLabel?: string; type?: 'zone' | 'vercel' }) {
+    const isActive = count > 0 && activeRulesCount > 0;
+    const label = type === 'vercel' ? 'project' : 'zone';
 
     return (
         <div className="flex items-center gap-3 px-4 py-3 bg-white border border-slate-200 rounded-md shadow-sm">
@@ -13,7 +14,7 @@ export function MetricsGrid({ zonesCount, activeRulesCount }: { zonesCount: numb
                         <span className="text-[10px] font-black text-emerald-600 uppercase tracking-widest whitespace-nowrap">Active</span>
                     </div>
                     <p className="text-sm font-bold text-slate-700">
-                        Securing <span className="text-indigo-600 tabular-nums">{zonesCount}</span> zone{zonesCount !== 1 ? 's' : ''} using <span className="text-indigo-600 tabular-nums">{activeRulesCount}</span> active rule{activeRulesCount !== 1 ? 's' : ''}
+                        Securing <span className="text-indigo-600 tabular-nums">{count}</span> {label}{count !== 1 ? 's' : ''} using <span className="text-indigo-600 tabular-nums">{activeRulesCount}</span> active rule{activeRulesCount !== 1 ? 's' : ''}
                     </p>
                 </>
             ) : (
@@ -23,9 +24,9 @@ export function MetricsGrid({ zonesCount, activeRulesCount }: { zonesCount: numb
                         <span className="text-[10px] font-black text-amber-600 uppercase tracking-widest whitespace-nowrap">Inactive</span>
                     </div>
                     <p className="text-sm font-bold text-slate-700">
-                        {zonesCount > 0
+                        {count > 0
                             ? "Protection is offline. Enable/Add a rule to begin securing traffic."
-                            : "Protection is offline. Add a zone and enable a rule to begin securing traffic."}
+                            : `Protection is offline. Add a ${label} and enable a rule to begin securing traffic.`}
                     </p>
                 </>
             )}

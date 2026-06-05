@@ -67,15 +67,20 @@ export function LogsTable({ logs, zones = [] }: { logs: any[], zones?: any[] }) 
                         const metadata = log.metadata ? JSON.parse(log.metadata) : {};
                         const date = new Date(log.timestamp);
                         const zoneName = zones.find(z => z.id === log.zoneConfigId)?.name || "Unknown Zone";
+                        const isError = log.actionTaken?.endsWith('_ERROR');
                         return (
-                            <tr key={log.id} className="transition-all group cursor-pointer hover:bg-slate-50/80">
+                            <tr key={log.id} className={`transition-all group cursor-pointer hover:bg-slate-50/80 ${isError ? 'bg-rose-50/10' : ''}`}>
                                 <td className="px-6 py-5">
                                     <div className="text-xs font-bold text-slate-700">{formatDate(date)}</div>
                                     <div className="text-[10px] text-slate-400 font-medium">{formatDateFull(date)}</div>
                                 </td>
                                 <td className="px-6 py-5">
                                     <div className="flex flex-col gap-1">
-                                        <span className="font-mono text-xs font-bold text-slate-900 bg-white border border-slate-200 px-3 py-1.5 rounded-md shadow-sm group-hover:border-indigo-400 transition-colors whitespace-nowrap inline-block w-max">
+                                        <span className={`font-mono text-xs font-bold px-3 py-1.5 rounded-md shadow-sm transition-colors whitespace-nowrap inline-block w-max border ${
+                                            isError 
+                                                ? 'bg-rose-50 border-rose-200 text-rose-700 group-hover:border-rose-400' 
+                                                : 'bg-white border-slate-200 text-slate-900 group-hover:border-indigo-400'
+                                        }`}>
                                             {log.targetValue}
                                         </span>
                                         <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">{log.targetType}</span>
@@ -86,17 +91,31 @@ export function LogsTable({ logs, zones = [] }: { logs: any[], zones?: any[] }) 
                                 </td>
                                 <td className="px-6 py-5">
                                     <div className="flex items-center gap-2">
-                                        <span className="text-[10px] font-black text-indigo-600 uppercase tracking-widest bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-100">
+                                        <span className={`text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded-md border ${
+                                            isError 
+                                                ? 'text-rose-600 bg-rose-50 border-rose-100' 
+                                                : 'text-indigo-600 bg-indigo-50 border-indigo-100'
+                                        }`}>
                                             {log.actionTaken.replace('_', ' ')}
                                         </span>
                                     </div>
                                 </td>
                                 <td className="px-6 py-5">
                                     <div className="flex flex-col items-start gap-0.5">
-                                        <span className={`text-[13px] font-black tabular-nums tracking-tight ${log.requestCount ? 'bg-gradient-to-br from-slate-900 to-slate-700 bg-clip-text text-transparent' : 'text-slate-400'}`}>
-                                            {log.requestCount ? log.requestCount.toLocaleString() : '—'}
-                                        </span>
-                                        {log.requestCount && <span className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">Hits</span>}
+                                        {isError ? (
+                                            <span className="text-rose-500 flex items-center" title="Rule execution error">
+                                                <svg className="w-4 h-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                                                    <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
+                                                </svg>
+                                            </span>
+                                        ) : (
+                                            <>
+                                                <span className={`text-[13px] font-black tabular-nums tracking-tight ${log.requestCount ? 'bg-gradient-to-br from-slate-900 to-slate-700 bg-clip-text text-transparent' : 'text-slate-400'}`}>
+                                                    {log.requestCount ? log.requestCount.toLocaleString() : '—'}
+                                                </span>
+                                                {log.requestCount && <span className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">Hits</span>}
+                                            </>
+                                        )}
                                     </div>
                                 </td>
                                 <td className="px-6 py-5">

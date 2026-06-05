@@ -1,6 +1,8 @@
 import { RuleHandler } from './interface';
 import { AddIpToListRule } from './handlers/addIpToList';
 import { UnderAttackModeRule } from './handlers/underAttackMode';
+import { VercelUnderAttackModeRule } from './handlers/vercelUnderAttackMode';
+import { VercelBotProtectionRule } from './handlers/vercelBotProtection';
 
 // We map the database rule "type" string to its matching RuleHandler class.
 //
@@ -17,3 +19,9 @@ export const RuleHandlers: Record<string, RuleHandler> = {
     // 'js_challenge': new JsChallengeRule(),
     // 'block_asn': new BlockAsnRule(),
 };
+
+export const VercelRuleHandlers: Record<string, any> = {
+    'vercel_under_attack_mode': new VercelUnderAttackModeRule(),
+    'vercel_bot_protection': new VercelBotProtectionRule(),
+};
+

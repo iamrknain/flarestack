@@ -2,6 +2,8 @@ import { RULES_MANIFEST, type RuleType } from "@flarestack/rules";
 import type { ReactNode } from "react";
 import { AddIpToList } from "~/components/dashboard/modals/rules/AddIpToList";
 import { UnderAttackMode } from "@/components/dashboard/modals/rules/UnderAttackMode";
+import { VercelUnderAttackMode } from "~/components/dashboard/modals/rules/VercelUnderAttackMode";
+import { VercelBotProtection } from "~/components/dashboard/modals/rules/VercelBotProtection";
 
 export { type RuleType };
 
@@ -147,6 +149,143 @@ const UI_DECORATIONS: Record<RuleType, RuleUIDefinition> = {
                 offThreshold: autoOff ? (parseInt(formData.get("offThreshold") as string) || 2000) : null,
                 recoveryLevel: autoOff ? (formData.get("recoveryLevel") as string || "medium") : "medium",
                 windowSeconds: parseInt(formData.get("windowSeconds") as string) || 300,
+                sendNotification,
+                notifyEmails: sendNotification ? (formData.get("notifyEmails") as string || null) : null,
+            };
+        }
+    },
+    'vercel_under_attack_mode': {
+        icon: (
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-rose-500">
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                <path d="M12 8v4" /><path d="M12 16h.01" />
+            </svg>
+        ),
+        enabled: true,
+        tag: "Vercel",
+        tagClasses: "bg-rose-100 text-rose-700 border-rose-200",
+        addComponent: VercelUnderAttackMode,
+        renderDetails: (rule, config) => (
+            <div className="flex items-center gap-3 flex-1 min-w-0 flex-wrap sm:flex-nowrap">
+                <span className="text-sm font-black text-slate-900 truncate shrink-0 max-w-[180px]" title={rule.name}>
+                    {rule.name}
+                </span>
+                <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest border border-slate-100 px-1.5 py-0.5 rounded-md flex-shrink-0">
+                    {config.name}
+                </span>
+                <div className="w-1 h-1 rounded-full bg-slate-300 flex-shrink-0 hidden sm:block" />
+                <div className="flex items-center gap-1 bg-rose-50 px-2 py-0.5 rounded-md border border-rose-100 shrink-0">
+                    <span className="text-[11px] text-rose-700 font-black tracking-tight">{rule.rateLimitThreshold?.toLocaleString()}</span>
+                    <span className="text-[10px] text-rose-600/70 font-bold uppercase tracking-tighter">On Trigger</span>
+                </div>
+                {rule.autoOff ? (
+                    <>
+                        <div className="w-1 h-1 rounded-full bg-slate-300 flex-shrink-0 hidden sm:block" />
+                        <div className="flex items-center gap-1 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-100 shrink-0">
+                            <span className="text-[11px] text-emerald-700 font-black tracking-tight">{rule.offThreshold?.toLocaleString()}</span>
+                            <span className="text-[10px] text-emerald-600/70 font-bold uppercase tracking-tighter">Off Trigger</span>
+                        </div>
+                    </>
+                ) : (
+                    <>
+                        <div className="w-1 h-1 rounded-full bg-slate-300 flex-shrink-0 hidden sm:block" />
+                        <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider shrink-0">Manual Recovery</span>
+                    </>
+                )}
+                {rule.sendNotification && rule.notifyEmails && (
+                    <>
+                        <div className="w-1 h-1 rounded-full bg-slate-300 flex-shrink-0 hidden sm:block" />
+                        <div className="flex items-center gap-1 bg-sky-50 px-2 py-0.5 rounded-md border border-sky-100 shrink-0">
+                            <span className="text-[9px] text-sky-700 font-bold uppercase tracking-tighter">Mail:</span>
+                            <span className="text-[10px] text-sky-600 font-bold max-w-[120px] truncate" title={rule.notifyEmails}>{rule.notifyEmails}</span>
+                        </div>
+                    </>
+                )}
+                <div className="w-1 h-1 rounded-full bg-slate-300 flex-shrink-0 hidden sm:block" />
+                <span className="text-[10px] text-slate-400 font-bold uppercase tracking-widest italic shrink-0">{rule.windowSeconds}s Window</span>
+            </div>
+        ),
+        prepareValues: (formData: FormData) => {
+            const autoOff = formData.get("autoOff") === "true";
+            const sendNotification = formData.get("sendNotification") === "true";
+            return {
+                name: formData.get("name") as string,
+                vercelProjectRef: formData.get("vercelProjectRef") as string,
+                rateLimitThreshold: parseInt(formData.get("rateLimitThreshold") as string) || 10000,
+                autoOff,
+                offThreshold: autoOff ? (parseInt(formData.get("offThreshold") as string) || 2000) : null,
+                windowSeconds: parseInt(formData.get("windowSeconds") as string) || 300,
+                sendNotification,
+                notifyEmails: sendNotification ? (formData.get("notifyEmails") as string || null) : null,
+            };
+        }
+    },
+    'vercel_bot_protection': {
+        icon: (
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-amber-500">
+                <rect x="3" y="11" width="18" height="10" rx="2" ry="2" />
+                <path d="M12 2v4M12 18v4M4 12H2M22 12h-2M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8z" />
+            </svg>
+        ),
+        enabled: true,
+        tag: "Vercel",
+        tagClasses: "bg-amber-100 text-amber-700 border-amber-200",
+        addComponent: VercelBotProtection,
+        renderDetails: (rule, config) => (
+            <div className="flex items-center gap-3 flex-1 min-w-0 flex-wrap sm:flex-nowrap">
+                <span className="text-sm font-black text-slate-900 truncate shrink-0 max-w-[180px]" title={rule.name}>
+                    {rule.name}
+                </span>
+                <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest border border-slate-100 px-1.5 py-0.5 rounded-md flex-shrink-0">
+                    {config.name}
+                </span>
+                <div className="w-1 h-1 rounded-full bg-slate-300 flex-shrink-0 hidden sm:block" />
+                <span className="text-[10px] font-bold text-indigo-600 uppercase tracking-wider shrink-0">
+                    Action: {rule.action}
+                </span>
+                <div className="w-1 h-1 rounded-full bg-slate-300 flex-shrink-0 hidden sm:block" />
+                <div className="flex items-center gap-1 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-100 shrink-0">
+                    <span className="text-[11px] text-amber-700 font-black tracking-tight">{rule.rateLimitThreshold?.toLocaleString()}</span>
+                    <span className="text-[10px] text-amber-600/70 font-bold uppercase tracking-tighter">On Trigger</span>
+                </div>
+                {rule.autoOff ? (
+                    <>
+                        <div className="w-1 h-1 rounded-full bg-slate-300 flex-shrink-0 hidden sm:block" />
+                        <div className="flex items-center gap-1 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-100 shrink-0">
+                            <span className="text-[11px] text-emerald-700 font-black tracking-tight">{rule.offThreshold?.toLocaleString()}</span>
+                            <span className="text-[10px] text-emerald-600/70 font-bold uppercase tracking-tighter">Off Trigger</span>
+                        </div>
+                    </>
+                ) : (
+                    <>
+                        <div className="w-1 h-1 rounded-full bg-slate-300 flex-shrink-0 hidden sm:block" />
+                        <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider shrink-0">Manual Recovery</span>
+                    </>
+                )}
+                {rule.sendNotification && rule.notifyEmails && (
+                    <>
+                        <div className="w-1 h-1 rounded-full bg-slate-300 flex-shrink-0 hidden sm:block" />
+                        <div className="flex items-center gap-1 bg-sky-50 px-2 py-0.5 rounded-md border border-sky-100 shrink-0">
+                            <span className="text-[9px] text-sky-700 font-bold uppercase tracking-tighter">Mail:</span>
+                            <span className="text-[10px] text-sky-600 font-bold max-w-[120px] truncate" title={rule.notifyEmails}>{rule.notifyEmails}</span>
+                        </div>
+                    </>
+                )}
+                <div className="w-1 h-1 rounded-full bg-slate-300 flex-shrink-0 hidden sm:block" />
+                <span className="text-[10px] text-slate-400 font-bold uppercase tracking-widest italic shrink-0">{rule.windowSeconds}s Window</span>
+            </div>
+        ),
+        prepareValues: (formData: FormData) => {
+            const autoOff = formData.get("autoOff") === "true";
+            const sendNotification = formData.get("sendNotification") === "true";
+            return {
+                name: formData.get("name") as string,
+                vercelProjectRef: formData.get("vercelProjectRef") as string,
+                rateLimitThreshold: parseInt(formData.get("rateLimitThreshold") as string) || 10000,
+                autoOff,
+                offThreshold: autoOff ? (parseInt(formData.get("offThreshold") as string) || 2000) : null,
+                windowSeconds: parseInt(formData.get("windowSeconds") as string) || 300,
+                action: formData.get("action") as string || "challenge",
                 sendNotification,
                 notifyEmails: sendNotification ? (formData.get("notifyEmails") as string || null) : null,
             };

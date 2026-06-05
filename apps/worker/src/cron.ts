@@ -1,5 +1,6 @@
-import { drizzle } from 'drizzle-orm/d1';
+import { getWorkerDb } from './lib/db';
 import { zoneConfigs, cloudflareAccounts } from '@flarestack/db/src/schema/zones';
+import { vercelAccounts, vercelProjects, vercelUnderAttackRules, vercelBotProtectionRules } from '@flarestack/db/src/schema/vercel';
 import { eq, inArray, and } from 'drizzle-orm';
 import { RULES_MANIFEST } from '@flarestack/rules';
 import { Env } from './index';
@@ -7,13 +8,14 @@ import { RuleEngine } from './engine';
 import { ActionLogger } from './lib/actions/logger';
 import { CacheStore } from '@flarestack/db/src/cache';
 import { CloudflareClient } from '@flarestack/cloudflare';
+import { VercelRuleHandlers } from './rules/index';
 import { initLogger, log } from './lib/log';
 
 // ─── Main cron handler ───────────────────────────────────────────────────────
 export async function runCronTasks(env: Env): Promise<void> {
     initLogger(env.DEBUG === 'true');
     log('--- FlareStack Execution Loop ---');
-    const db = drizzle(env.DB);
+    const db = getWorkerDb(env);
 
     // ── 1. Load all active zones ─────────────────────────────────────────────
     const activeZones = await db
@@ -41,7 +43,9 @@ export async function runCronTasks(env: Env): Promise<void> {
 
     // ── 3. Mega-batch: load ALL rules for ALL zones in ONE db.batch() ────────
     //    Build one query per (zone × ruleTable) pair, fire them all at once.
-    const ruleTables = Object.values(RULES_MANIFEST).filter(m => m.table);
+    const ruleTables = Object.values(RULES_MANIFEST).filter(
+        m => m.table && !m.type.startsWith('vercel_')
+    );
 
     const batchQueries: any[] = [];
     const queryIndex: { zoneId: string; ruleType: string }[] = [];
@@ -190,6 +194,114 @@ export async function runCronTasks(env: Env): Promise<void> {
             );
         }
     });
+
+    // ── 6. Load all active Vercel projects ────────────────────────────────────
+    const activeVercelProjects = await db
+        .select()
+        .from(vercelProjects)
+        .where(eq(vercelProjects.isActive, true))
+        .all();
+
+    if (activeVercelProjects.length > 0) {
+        log(`\nFound ${activeVercelProjects.length} active Vercel project(s).`);
+
+        // Load all active Vercel accounts to resolve credentials
+        const uniqueVercelAccountRefs = [...new Set(activeVercelProjects.map(p => p.vercelAccountRef))];
+        const vercelAccountRows = uniqueVercelAccountRefs.length > 0
+            ? await db
+                .select()
+                .from(vercelAccounts)
+                .where(inArray(vercelAccounts.id, uniqueVercelAccountRefs))
+                .all()
+            : [];
+
+        const vercelAccountMap = new Map(vercelAccountRows.map(a => [a.id, a]));
+
+        // Load active rules for these projects
+        const vercelUnderAttackRulesList = await db
+            .select()
+            .from(vercelUnderAttackRules)
+            .where(eq(vercelUnderAttackRules.isActive, true))
+            .all();
+
+        const vercelBotProtectionRulesList = await db
+            .select()
+            .from(vercelBotProtectionRules)
+            .where(eq(vercelBotProtectionRules.isActive, true))
+            .all();
+
+        const minutesSinceEpoch = Math.floor(Date.now() / (60 * 1000));
+
+        // Group rules by project id
+        const underAttackRulesMap = new Map<string, typeof vercelUnderAttackRulesList>();
+        const botRulesMap = new Map<string, typeof vercelBotProtectionRulesList>();
+
+        for (const rule of vercelUnderAttackRulesList) {
+            const list = underAttackRulesMap.get(rule.vercelProjectRef) || [];
+            list.push(rule);
+            underAttackRulesMap.set(rule.vercelProjectRef, list);
+        }
+        for (const rule of vercelBotProtectionRulesList) {
+            const list = botRulesMap.get(rule.vercelProjectRef) || [];
+            list.push(rule);
+            botRulesMap.set(rule.vercelProjectRef, list);
+        }
+
+        for (const project of activeVercelProjects) {
+            const vercelAccount = vercelAccountMap.get(project.vercelAccountRef);
+            if (!vercelAccount) {
+                console.error(`Vercel project: no Vercel account found for ref "${project.vercelAccountRef}" — skipping.`);
+                continue;
+            }
+
+            const projectWithCredentials = {
+                ...project,
+                vercelToken: vercelAccount.vercelToken,
+                vercelTeamId: vercelAccount.vercelTeamId
+            };
+
+            log(`\nProcessing Vercel project: ${projectWithCredentials.name} (${projectWithCredentials.vercelProjectId})`);
+
+            const underAttackRules = underAttackRulesMap.get(projectWithCredentials.id) || [];
+            const botRules = botRulesMap.get(projectWithCredentials.id) || [];
+
+            // Process under attack rules
+            for (const rule of underAttackRules) {
+                const windowSeconds = rule.windowSeconds ?? 300;
+                const intervalMins = Math.max(1, Math.floor(windowSeconds / 60));
+                const currentSlot = minutesSinceEpoch % intervalMins;
+                const isDue = currentSlot === 0 || currentSlot === intervalMins - 1;
+
+                if (!isDue) continue;
+
+                log(`  Executing rule ${rule.id} (type=vercel_under_attack_mode)`);
+                const handler = VercelRuleHandlers['vercel_under_attack_mode'];
+                try {
+                    await handler.execute({ project: projectWithCredentials, rule, actionLogger, env });
+                } catch (err) {
+                    console.error(`  Error running Vercel under attack rule ${rule.id}:`, err);
+                }
+            }
+
+            // Process bot protection rules
+            for (const rule of botRules) {
+                const windowSeconds = rule.windowSeconds ?? 300;
+                const intervalMins = Math.max(1, Math.floor(windowSeconds / 60));
+                const currentSlot = minutesSinceEpoch % intervalMins;
+                const isDue = currentSlot === 0 || currentSlot === intervalMins - 1;
+
+                if (!isDue) continue;
+
+                log(`  Executing rule ${rule.id} (type=vercel_bot_protection)`);
+                const handler = VercelRuleHandlers['vercel_bot_protection'];
+                try {
+                    await handler.execute({ project: projectWithCredentials, rule, actionLogger, env });
+                } catch (err) {
+                    console.error(`  Error running Vercel bot protection rule ${rule.id}:`, err);
+                }
+            }
+        }
+    }
 
     log('\n--- FlareStack Execution Loop Complete ---');
 }

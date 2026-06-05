@@ -1,5 +1,6 @@
 import { sqliteTable, text, integer } from 'drizzle-orm/sqlite-core';
 import { user } from './auth';
+import { vercelProjects } from './vercel';
 
 export const cloudflareAccounts = sqliteTable('cloudflare_accounts', {
     id: text('id').primaryKey(),
@@ -62,7 +63,8 @@ export const underAttackRules = sqliteTable('under_attack_rules', {
 export const actionLogs = sqliteTable('action_logs', {
     id: text('id').primaryKey(),
     userId: text('user_id').notNull(),
-    zoneConfigId: text('zone_config_id').notNull().references(() => zoneConfigs.id),
+    zoneConfigId: text('zone_config_id').references(() => zoneConfigs.id), // Nullable for Vercel actions
+    vercelProjectRef: text('vercel_project_ref').references(() => vercelProjects.id), // Nullable for Cloudflare actions
     ruleId: text('rule_id').notNull(), // Polymorphic: no foreign key to a specific rule table
     actionTaken: text('action_taken').notNull(), // 'IP_ADDED_TO_LIST', 'JS_CHALLENGE', etc.
     targetType: text('target_type').default('IP').notNull(), // e.g. 'IP', 'ASN', 'COUNTRY'
