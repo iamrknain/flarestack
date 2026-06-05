@@ -2,34 +2,40 @@
   "name": "flarestack",
   "version": "1.0.0",
   "private": true,
-  "description": "SaaS-ready, edge-native IP reputation and automated blocking system for Cloudflare.",
+  "description": "SaaS-ready IP reputation and automated blocking system.",
   "scripts": {
-    "dev": "pnpm -r run dev",
-    "//stop": "Use 'pnpm stop' when closing the terminal tab (instead of Ctrl+C) leaves orphan dev servers holding ports 5173, 8787, or 9229. Ctrl+C in the same terminal sends SIGINT to the whole process group and kills everything cleanly — but closing the tab only kills pnpm, leaving grandchild node/wrangler processes running as orphans.",
-    "stop": "fuser -k 9229/tcp 5173/tcp 8787/tcp 3000/tcp || true",
-    "setup": "bash scripts/setup-local.sh",
-    "clean": "bash scripts/clean.sh",
-    "nuke:db": "bash scripts/nuke-db.sh",
-    "db:generate": "pnpm --filter @flarestack/db generate",
-    "db:migrate": "wrangler d1 migrations apply flarestack-db --local --config apps/worker/wrangler.jsonc --persist-to .wrangler/state",
-    "db:migrate:remote": "wrangler d1 migrations apply flarestack-db --remote --config apps/worker/wrangler.jsonc",
-    "deploy-worker": "node scripts/deploy-worker.js",
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:push": "drizzle-kit push",
+    "db:clean": "node scripts/clean-db.js",
     "simulate-traffic": "node scripts/simulate-traffic.js",
-    "build": "pnpm -r run build",
-    "test": "pnpm -r run test",
-    "typecheck": "pnpm -r run typecheck"
+    "cron-worker": "tsx src/cron/worker.ts"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "packageManager": "pnpm@10.30.1",
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "drizzle-orm": "^0.39.3",
+    "isbot": "^5.1.31",
+    "next": "16.2.6",
+    "postgres": "^3.4.5",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "resend": "^6.9.2"
+  },
   "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/bcryptjs": "^2.4.6",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "drizzle-kit": "^0.30.4",
+    "eslint": "^9",
+    "eslint-config-next": "16.2.6",
+    "tailwindcss": "^4",
     "tsx": "^4.22.3",
-    "wrangler": "^4.94.0"
-  },
-  "pnpm": {
-    "overrides": {
-      "drizzle-orm": "^0.39.3"
-    }
+    "typescript": "^5"
   }
 }

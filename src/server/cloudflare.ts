@@ -1,0 +1,794 @@
+"use server";
+
+import { headers } from "next/headers";
+import { getDb } from "~/db";
+import { requireAuth, getSession } from "~/lib/auth";
+import { cloudflareAccounts, zoneConfigs, addIpToListRules, underAttackRules, entityCache, actionLogs } from "~/db/schema";
+import { eq, and, inArray, desc, sql, gte, lte } from "drizzle-orm";
+import { CloudflareClient, type ListItem } from "~/lib/cloudflare";
+import { CacheStore } from "~/db/cache";
+
+import { getRangeConditions } from "~/lib/filter";
+
+async function getClient(accountRef: string) {
+  const user = await requireAuth();
+  const db = getDb();
+  
+  const [account] = await db
+    .select()
+    .from(cloudflareAccounts)
+    .where(and(eq(cloudflareAccounts.id, accountRef), eq(cloudflareAccounts.userId, user.id)));
+    
+  if (!account) {
+    throw new Error("Cloudflare Account not found");
+  }
+  
+  return {
+    cf: new CloudflareClient(account.cfAccountId, account.cfApiToken),
+    db,
+  };
+}
+
+export async function getZonesAction(accountRef: string) {
+  try {
+    const { cf } = await getClient(accountRef);
+    return await cf.zones.getZones();
+  } catch (error: any) {
+    return { error: error.message || "Failed to fetch zones" };
+  }
+}
+
+export async function getListsAction(accountRef: string) {
+  try {
+    const { cf } = await getClient(accountRef);
+    return await cf.lists.getLists();
+  } catch (error: any) {
+    return { error: error.message || "Failed to fetch lists" };
+  }
+}
+
+export async function getListItemsAction(accountRef: string, listId: string, limit = 10) {
+  try {
+    const { cf } = await getClient(accountRef);
+    return await cf.lists.getItems(listId, limit);
+  } catch (error: any) {
+    return { error: error.message || "Failed to fetch list items" };
+  }
+}
+
+export async function addListItemsAction(accountRef: string, listId: string, items: { ip: string; comment?: string }[]) {
+  try {
+    const { cf, db } = await getClient(accountRef);
+    const cacheStore = new CacheStore(db);
+    
+    const result = await cf.lists.addItems(listId, items);
+    const addedIps = items.map((i) => i.ip).filter((ip): ip is string => !!ip);
+    if (addedIps.length > 0) {
+      await cacheStore.add(`cf_list:${listId}`, addedIps);
+    }
+    return { success: true, added: items.length, operationId: result };
+  } catch (error: any) {
+    return { error: error.message || "Failed to add items to list" };
+  }
+}
+
+export async function deleteListItemsAction(accountRef: string, listId: string, itemIds: string[]) {
+  try {
+    const { cf, db } = await getClient(accountRef);
+    const cacheStore = new CacheStore(db);
+    
+    const listItemsBefore = await cf.lists.getItems(listId);
+    const deletedItemMap = new Map<string, string | undefined>(listItemsBefore.map((i: ListItem) => [i.id, i.ip]));
+    const deletedIps = itemIds.map((id) => deletedItemMap.get(id)).filter((ip): ip is string => !!ip);
+
+    const operationIds = await cf.lists.deleteItems(listId, itemIds);
+
+    if (deletedIps.length > 0) {
+      await cacheStore.remove(`cf_list:${listId}`, deletedIps);
+    }
+
+    return { success: true, deleted: itemIds.length, operationIds };
+  } catch (error: any) {
+    return { error: error.message || "Failed to delete list items" };
+  }
+}
+
+export async function getTopStatsAction(accountRef: string, zoneTag: string, dimensions: string[], windowSeconds?: number, limit = 10) {
+  try {
+    const { cf } = await getClient(accountRef);
+    return await cf.analytics.getTopStats({
+      zoneTag,
+      dimensions,
+      windowSeconds,
+      limit,
+    });
+  } catch (error: any) {
+    return { error: error.message || "Failed to fetch top stats" };
+  }
+}
+
+export async function getCloudflareDataAction(searchParams: any) {
+  const reqHeaders = await headers();
+  const cookieHeader = reqHeaders.get("cookie") || undefined;
+  const sessionData = await getSession(cookieHeader);
+  if (!sessionData?.user) {
+    return { error: "Unauthorized" };
+  }
+  try {
+    const userId = sessionData.user.id;
+    const db = getDb();
+    const conditions = getRangeConditions(userId, searchParams);
+
+    const [
+      accountsResult,
+      zonesResult,
+      recentActionsResult,
+      countResult,
+      ...ruleResults
+    ] = await Promise.all([
+      db
+        .select()
+        .from(cloudflareAccounts)
+        .where(eq(cloudflareAccounts.userId as any, userId))
+        .orderBy(desc(cloudflareAccounts.createdAt)),
+      db
+        .select()
+        .from(zoneConfigs)
+        .where(eq(zoneConfigs.userId as any, userId))
+        .orderBy(desc(zoneConfigs.createdAt)),
+      db
+        .select()
+        .from(actionLogs)
+        .where(and(...conditions, eq(actionLogs.provider as any, "cloudflare")))
+        .orderBy(desc(actionLogs.timestamp))
+        .limit(10),
+      db
+        .select({ count: sql<number>`count(*)` })
+        .from(actionLogs)
+        .where(and(...conditions, eq(actionLogs.provider as any, "cloudflare"))),
+      db.select().from(addIpToListRules).where(eq(addIpToListRules.userId as any, userId)).orderBy(desc(addIpToListRules.createdAt)),
+      db.select().from(underAttackRules).where(eq(underAttackRules.userId as any, userId)).orderBy(desc(underAttackRules.createdAt)),
+    ]);
+
+    const totalBlocks = (countResult[0]?.count ?? 0) as number;
+    const rules = [
+      ...(ruleResults[0] as any[]).map((r) => ({ ...r, type: "add_ip_to_list" })),
+      ...(ruleResults[1] as any[]).map((r) => ({ ...r, type: "under_attack_mode" })),
+    ];
+
+    return {
+      success: true,
+      data: {
+        accounts: accountsResult,
+        zones: zonesResult,
+        recentActions: recentActionsResult,
+        totalBlocks,
+        rules,
+      }
+    };
+  } catch (err) {
+    console.error(err);
+    return { error: "Failed to fetch data" };
+  }
+}
+
+export async function getIpsDataAction() {
+  const reqHeaders = await headers();
+  const cookieHeader = reqHeaders.get("cookie") || undefined;
+  const sessionData = await getSession(cookieHeader);
+  if (!sessionData?.user) {
+    return { error: "Unauthorized" };
+  }
+  try {
+    const userId = sessionData.user.id;
+    const db = getDb();
+    const [zonesResult, accountsResult] = await Promise.all([
+      db
+        .select()
+        .from(zoneConfigs)
+        .where(eq(zoneConfigs.userId as any, userId))
+        .orderBy(desc(zoneConfigs.createdAt)),
+      db
+        .select()
+        .from(cloudflareAccounts)
+        .where(eq(cloudflareAccounts.userId as any, userId))
+        .orderBy(desc(cloudflareAccounts.createdAt)),
+    ]);
+
+    return {
+      success: true,
+      data: {
+        zones: zonesResult,
+        accounts: accountsResult,
+      }
+    };
+  } catch (err) {
+    console.error(err);
+    return { error: "Failed to fetch data" };
+  }
+}
+
+export async function getListsDataAction() {
+  const reqHeaders = await headers();
+  const cookieHeader = reqHeaders.get("cookie") || undefined;
+  const sessionData = await getSession(cookieHeader);
+  if (!sessionData?.user) {
+    return { error: "Unauthorized" };
+  }
+  try {
+    const userId = sessionData.user.id;
+    const db = getDb();
+    const accountsResult = await db
+      .select()
+      .from(cloudflareAccounts)
+      .where(eq(cloudflareAccounts.userId as any, userId))
+      .orderBy(desc(cloudflareAccounts.createdAt));
+
+    return {
+      success: true,
+      data: {
+        accounts: accountsResult,
+      }
+    };
+  } catch (err) {
+    console.error(err);
+    return { error: "Failed to fetch data" };
+  }
+}
+
+export async function addCloudflareAccount(label: string, cfAccountId: string, cfApiToken: string) {
+  const db = getDb();
+  const reqHeaders = await headers();
+  const cookieHeader = reqHeaders.get("cookie") || undefined;
+  const sessionData = await getSession(cookieHeader);
+  
+  if (!sessionData?.user) {
+    return { error: "Unauthorized. Please log in." };
+  }
+
+  const userId = sessionData.user.id;
+
+  if (!label || !cfAccountId || !cfApiToken) {
+    return { error: "All fields are required." };
+  }
+
+  if (!/^[a-fA-F0-9]{32,45}$/.test(cfAccountId)) {
+    return { error: "Invalid Account ID format. It must be between 32 and 45 alphanumeric characters." };
+  }
+
+  try {
+    const verifyRes = await fetch("https://api.cloudflare.com/client/v4/user/tokens/verify", {
+      headers: { Authorization: `Bearer ${cfApiToken}` },
+    });
+    const verifyJson = (await verifyRes.json()) as { success: boolean; errors?: { message: string }[] };
+    if (!verifyRes.ok || !verifyJson.success) {
+      const detail = verifyJson.errors?.[0]?.message || `HTTP ${verifyRes.status}`;
+      return { error: `Invalid API Token. Cloudflare rejected it: ${detail}` };
+    }
+  } catch (err) {
+    const errMsg = err instanceof Error ? err.message : "Unknown error";
+    return { error: `Could not reach Cloudflare to verify the token: ${errMsg}` };
+  }
+
+  await db.insert(cloudflareAccounts).values({
+    id: crypto.randomUUID(),
+    userId,
+    label,
+    cfAccountId,
+    cfApiToken,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  });
+  return { success: true };
+}
+
+export async function deleteCloudflareAccount(accountId: string) {
+  const db = getDb();
+  const reqHeaders = await headers();
+  const cookieHeader = reqHeaders.get("cookie") || undefined;
+  const sessionData = await getSession(cookieHeader);
+  
+  if (!sessionData?.user) {
+    return { error: "Unauthorized. Please log in." };
+  }
+
+  const userId = sessionData.user.id;
+
+  const dependentZones = await db
+    .select()
+    .from(zoneConfigs)
+    .where(and(eq(zoneConfigs.cfAccountRef as any, accountId), eq(zoneConfigs.userId as any, userId)) as any);
+  if (dependentZones.length > 0) {
+    return { error: `Cannot delete — ${dependentZones.length} zone(s) still use this account. Remove those zones first.` };
+  }
+  
+  await db
+    .delete(cloudflareAccounts)
+    .where(and(eq(cloudflareAccounts.id as any, accountId), eq(cloudflareAccounts.userId as any, userId)) as any);
+    
+  return { success: true };
+}
+
+export async function editCloudflareAccount(accountId: string, label: string, cfAccountId: string, cfApiToken?: string) {
+  const db = getDb();
+  const reqHeaders = await headers();
+  const cookieHeader = reqHeaders.get("cookie") || undefined;
+  const sessionData = await getSession(cookieHeader);
+  
+  if (!sessionData?.user) {
+    return { error: "Unauthorized. Please log in." };
+  }
+
+  const userId = sessionData.user.id;
+
+  if (!label || !cfAccountId) {
+    return { error: "All fields except API Token are required." };
+  }
+
+  if (!/^[a-fA-F0-9]{32,45}$/.test(cfAccountId)) {
+    return { error: "Invalid Account ID format. It must be between 32 and 45 alphanumeric characters." };
+  }
+
+  const [existing] = await db
+    .select()
+    .from(cloudflareAccounts)
+    .where(and(eq(cloudflareAccounts.id, accountId), eq(cloudflareAccounts.userId as any, userId)) as any);
+
+  if (!existing) {
+    return { error: "Account not found." };
+  }
+
+  const finalToken = cfApiToken && cfApiToken.trim().length > 0 ? cfApiToken : existing.cfApiToken;
+
+  if (cfApiToken && cfApiToken.trim().length > 0) {
+    try {
+      const verifyRes = await fetch("https://api.cloudflare.com/client/v4/user/tokens/verify", {
+        headers: { Authorization: `Bearer ${finalToken}` },
+      });
+      const verifyJson = (await verifyRes.json()) as { success: boolean; errors?: { message: string }[] };
+      if (!verifyRes.ok || !verifyJson.success) {
+        const detail = verifyJson.errors?.[0]?.message || `HTTP ${verifyRes.status}`;
+        return { error: `Invalid API Token. Cloudflare rejected it: ${detail}` };
+      }
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : "Unknown error";
+      return { error: `Could not reach Cloudflare to verify the token: ${errMsg}` };
+    }
+  }
+
+  await db.update(cloudflareAccounts)
+    .set({
+      label,
+      cfAccountId,
+      cfApiToken: finalToken,
+      updatedAt: new Date(),
+    })
+    .where(and(eq(cloudflareAccounts.id, accountId), eq(cloudflareAccounts.userId as any, userId)) as any);
+
+  return { success: true };
+}
+
+export async function editZone(zoneId: string, name: string) {
+  const db = getDb();
+  const reqHeaders = await headers();
+  const cookieHeader = reqHeaders.get("cookie") || undefined;
+  const sessionData = await getSession(cookieHeader);
+  
+  if (!sessionData?.user) {
+    return { error: "Unauthorized. Please log in." };
+  }
+
+  const userId = sessionData.user.id;
+
+  if (!name) {
+    return { error: "Website Name is required." };
+  }
+
+  await db.update(zoneConfigs)
+    .set({ name, updatedAt: new Date() })
+    .where(and(eq(zoneConfigs.id, zoneId), eq(zoneConfigs.userId as any, userId)) as any);
+
+  return { success: true };
+}
+
+export async function editAddIpToListRule(ruleId: string, data: {
+  name: string;
+  cfListId: string;
+  cfListName: string;
+  rateLimitThreshold: number;
+  windowSeconds: number;
+  cfApiTokenOverride?: string | null;
+}) {
+  const db = getDb();
+  const reqHeaders = await headers();
+  const cookieHeader = reqHeaders.get("cookie") || undefined;
+  const sessionData = await getSession(cookieHeader);
+  
+  if (!sessionData?.user) {
+    return { error: "Unauthorized. Please log in." };
+  }
+
+  const userId = sessionData.user.id;
+
+  await db.update(addIpToListRules)
+    .set({
+      ...data,
+      updatedAt: new Date(),
+    })
+    .where(and(eq(addIpToListRules.id, ruleId), eq(addIpToListRules.userId as any, userId)) as any);
+
+  return { success: true };
+}
+
+export async function editUnderAttackRule(ruleId: string, data: {
+  name: string;
+  rateLimitThreshold: number;
+  autoOff: boolean;
+  offThreshold?: number | null;
+  recoveryLevel?: string | null;
+  windowSeconds: number;
+  sendNotification: boolean;
+  notifyEmails?: string | null;
+  cfApiTokenOverride?: string | null;
+}) {
+  const db = getDb();
+  const reqHeaders = await headers();
+  const cookieHeader = reqHeaders.get("cookie") || undefined;
+  const sessionData = await getSession(cookieHeader);
+  
+  if (!sessionData?.user) {
+    return { error: "Unauthorized. Please log in." };
+  }
+
+  const userId = sessionData.user.id;
+
+  await db.update(underAttackRules)
+    .set({
+      ...data,
+      recoveryLevel: data.recoveryLevel || "medium",
+      updatedAt: new Date(),
+    })
+    .where(and(eq(underAttackRules.id, ruleId), eq(underAttackRules.userId as any, userId)) as any);
+
+  return { success: true };
+}
+
+export async function addZone(name: string, cfZoneId: string, cfAccountRef: string, domain?: string | null) {
+  const db = getDb();
+  const reqHeaders = await headers();
+  const cookieHeader = reqHeaders.get("cookie") || undefined;
+  const sessionData = await getSession(cookieHeader);
+  
+  if (!sessionData?.user) {
+    return { error: "Unauthorized. Please log in." };
+  }
+
+  const userId = sessionData.user.id;
+
+  if (!name || !cfZoneId || !cfAccountRef) {
+    return { error: "All fields are required." };
+  }
+
+  await db.insert(zoneConfigs).values({
+    id: crypto.randomUUID(),
+    userId,
+    cfAccountRef,
+    name,
+    cfZoneId,
+    domain: domain || null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  });
+  return { success: true };
+}
+
+export async function deleteZone(zoneId: string) {
+  const db = getDb();
+  const reqHeaders = await headers();
+  const cookieHeader = reqHeaders.get("cookie") || undefined;
+  const sessionData = await getSession(cookieHeader);
+  
+  if (!sessionData?.user) {
+    return { error: "Unauthorized. Please log in." };
+  }
+
+  const userId = sessionData.user.id;
+
+  const rulesInZone = await db
+    .select({ cfListId: addIpToListRules.cfListId })
+    .from(addIpToListRules)
+    .where(and(eq(addIpToListRules.zoneConfigId as any, zoneId), eq(addIpToListRules.userId as any, userId)) as any);
+
+  const cacheNamespaces = rulesInZone.map((r: any) => `cf_list:${r.cfListId}`);
+
+  await db.transaction(async (tx: any) => {
+    await tx.delete(actionLogs).where(and(
+      eq(actionLogs.provider as any, "cloudflare"),
+      eq(actionLogs.resourceId as any, zoneId),
+      eq(actionLogs.userId as any, userId)
+    ) as any);
+    
+    await tx.delete(addIpToListRules).where(and(eq(addIpToListRules.zoneConfigId as any, zoneId), eq(addIpToListRules.userId as any, userId)) as any);
+      await tx.delete(underAttackRules).where(and(eq(underAttackRules.zoneConfigId as any, zoneId), eq(underAttackRules.userId as any, userId)) as any);
+
+    if (cacheNamespaces.length > 0) {
+      await tx.delete(entityCache).where(inArray(entityCache.namespace as any, cacheNamespaces) as any);
+    }
+
+    await tx.delete(zoneConfigs).where(and(eq(zoneConfigs.id as any, zoneId), eq(zoneConfigs.userId as any, userId)) as any);
+  });
+  return { success: true };
+}
+
+export async function toggleZoneStatus(zoneId: string, isActive: boolean) {
+  const db = getDb();
+  const reqHeaders = await headers();
+  const cookieHeader = reqHeaders.get("cookie") || undefined;
+  const sessionData = await getSession(cookieHeader);
+  
+  if (!sessionData?.user) {
+    return { error: "Unauthorized. Please log in." };
+  }
+
+  const userId = sessionData.user.id;
+
+  await db.transaction(async (tx: any) => {
+    await tx
+      .update(zoneConfigs)
+      .set({ isActive, updatedAt: new Date() })
+      .where(and(eq(zoneConfigs.id as any, zoneId), eq(zoneConfigs.userId as any, userId)) as any);
+    
+    await tx.update(addIpToListRules).set({ isActive, updatedAt: new Date() }).where(and(eq(addIpToListRules.zoneConfigId as any, zoneId), eq(addIpToListRules.userId as any, userId)) as any);
+      await tx.update(underAttackRules).set({ isActive, updatedAt: new Date() }).where(and(eq(underAttackRules.zoneConfigId as any, zoneId), eq(underAttackRules.userId as any, userId)) as any);
+  });
+  return { success: true };
+}
+
+export async function createAddIpToListRule(data: {
+  name: string;
+  zoneConfigId: string;
+  cfListId: string;
+  cfListName: string;
+  rateLimitThreshold: number;
+  windowSeconds: number;
+  cfApiTokenOverride?: string | null;
+}) {
+  const db = getDb();
+  const reqHeaders = await headers();
+  const cookieHeader = reqHeaders.get("cookie") || undefined;
+  const sessionData = await getSession(cookieHeader);
+  
+  if (!sessionData?.user) {
+    return { error: "Unauthorized. Please log in." };
+  }
+
+  const userId = sessionData.user.id;
+
+  await db.insert(addIpToListRules).values({
+    id: crypto.randomUUID(),
+    userId,
+    ...data,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  });
+  return { success: true };
+}
+
+export async function createUnderAttackRule(data: {
+  name: string;
+  zoneConfigId: string;
+  rateLimitThreshold: number;
+  autoOff: boolean;
+  offThreshold?: number | null;
+  recoveryLevel?: string | null;
+  windowSeconds: number;
+  sendNotification: boolean;
+  notifyEmails?: string | null;
+  cfApiTokenOverride?: string | null;
+}) {
+  const db = getDb();
+  const reqHeaders = await headers();
+  const cookieHeader = reqHeaders.get("cookie") || undefined;
+  const sessionData = await getSession(cookieHeader);
+  
+  if (!sessionData?.user) {
+    return { error: "Unauthorized. Please log in." };
+  }
+
+  const userId = sessionData.user.id;
+
+  await db.insert(underAttackRules).values({
+    id: crypto.randomUUID(),
+    userId,
+    ...data,
+    recoveryLevel: data.recoveryLevel || "medium",
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  });
+  return { success: true };
+}
+
+export async function deleteCloudflareRule(ruleId: string, ruleType: string) {
+  const db = getDb();
+  const reqHeaders = await headers();
+  const cookieHeader = reqHeaders.get("cookie") || undefined;
+  const sessionData = await getSession(cookieHeader);
+  
+  if (!sessionData?.user) {
+    return { error: "Unauthorized. Please log in." };
+  }
+
+  const userId = sessionData.user.id;
+  if (ruleId) {
+    if (ruleType === "add_ip_to_list") {
+      const [ruleRow] = await db.select().from(addIpToListRules).where(and(eq(addIpToListRules.id as any, ruleId), eq(addIpToListRules.userId as any, userId)) as any);
+      await db.transaction(async (tx: any) => {
+        await tx.delete(actionLogs).where(eq(actionLogs.ruleId as any, ruleId) as any);
+        await tx.delete(addIpToListRules).where(and(eq(addIpToListRules.id as any, ruleId), eq(addIpToListRules.userId as any, userId)) as any);
+        if (ruleRow?.cfListId) {
+          await tx.delete(entityCache).where(eq(entityCache.namespace as any, `cf_list:${ruleRow.cfListId}`) as any);
+        }
+      });
+    } else if (ruleType === "under_attack_mode") {
+      await db.transaction(async (tx: any) => {
+        await tx.delete(actionLogs).where(eq(actionLogs.ruleId as any, ruleId) as any);
+        await tx.delete(underAttackRules).where(and(eq(underAttackRules.id as any, ruleId), eq(underAttackRules.userId as any, userId)) as any);
+      });
+    }
+  }
+  return { success: true };
+}
+
+export async function toggleCloudflareRuleStatus(ruleId: string, ruleType: string, isActive: boolean) {
+  const db = getDb();
+  const reqHeaders = await headers();
+  const cookieHeader = reqHeaders.get("cookie") || undefined;
+  const sessionData = await getSession(cookieHeader);
+  
+  if (!sessionData?.user) {
+    return { error: "Unauthorized. Please log in." };
+  }
+
+  const userId = sessionData.user.id;
+  if (ruleId) {
+    if (ruleType === "add_ip_to_list") {
+      await db.update(addIpToListRules).set({ isActive, updatedAt: new Date() }).where(and(eq(addIpToListRules.id as any, ruleId), eq(addIpToListRules.userId as any, userId)) as any);
+    } else if (ruleType === "under_attack_mode") {
+      await db.update(underAttackRules).set({ isActive, updatedAt: new Date() }).where(and(eq(underAttackRules.id as any, ruleId), eq(underAttackRules.userId as any, userId)) as any);
+    }
+  }
+  return { success: true };
+}
+
+export async function validateTokenPermissionsAction(
+  zoneConfigId: string,
+  ruleType: "add_ip_to_list" | "under_attack_mode",
+  cfApiTokenOverride?: string
+) {
+  const reqHeaders = await headers();
+  const cookieHeader = reqHeaders.get("cookie") || undefined;
+  const sessionData = await getSession(cookieHeader);
+
+  if (!sessionData?.user) {
+    return { error: "Unauthorized. Please log in." };
+  }
+
+  const userId = sessionData.user.id;
+  const db = getDb();
+
+  const [zone] = await db
+    .select()
+    .from(zoneConfigs)
+    .where(and(eq(zoneConfigs.id, zoneConfigId), eq(zoneConfigs.userId as any, userId)) as any);
+
+  if (!zone) {
+    return { error: "Zone configuration not found." };
+  }
+
+  const [account] = await db
+    .select()
+    .from(cloudflareAccounts)
+    .where(and(eq(cloudflareAccounts.id, zone.cfAccountRef), eq(cloudflareAccounts.userId as any, userId)) as any);
+
+  if (!account) {
+    return { error: "Cloudflare Account not found." };
+  }
+
+  const apiToken = cfApiTokenOverride && cfApiTokenOverride.trim().length > 0
+    ? cfApiTokenOverride.trim()
+    : account.cfApiToken;
+
+  const cf = new CloudflareClient(account.cfAccountId, apiToken);
+  const checks: { name: string; passed: boolean; error?: string; requiredPermission: string }[] = [];
+
+  // 1. Check Analytics (Common to both rules)
+  try {
+    await cf.analytics.getTopStats({
+      zoneTag: zone.cfZoneId,
+      dimensions: [],
+      limit: 1,
+      windowSeconds: 60,
+    });
+    checks.push({
+      name: "Analytics Access",
+      passed: true,
+      requiredPermission: "Account > Account Analytics > Read OR Zone > Analytics > Read",
+    });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Unauthorized or invalid query";
+    checks.push({
+      name: "Analytics Access",
+      passed: false,
+      error: message,
+      requiredPermission: "Account > Account Analytics > Read OR Zone > Analytics > Read",
+    });
+  }
+
+  // 2. Rule-specific checks
+  if (ruleType === "add_ip_to_list") {
+    try {
+      await cf.lists.getLists();
+      checks.push({
+        name: "IP List Management",
+        passed: true,
+        requiredPermission: "Account > IP Lists > Read & Account > IP Lists > Edit",
+      });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Unauthorized access to IP lists";
+      checks.push({
+        name: "IP List Management",
+        passed: false,
+        error: message,
+        requiredPermission: "Account > IP Lists > Read & Account > IP Lists > Edit",
+      });
+    }
+  } else if (ruleType === "under_attack_mode") {
+    let currentLevel: string | null = null;
+    try {
+      currentLevel = await cf.zones.getSecurityLevel(zone.cfZoneId);
+      checks.push({
+        name: "Zone Settings (Read)",
+        passed: true,
+        requiredPermission: "Zone > Zone Settings > Read",
+      });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Unauthorized settings read";
+      checks.push({
+        name: "Zone Settings (Read)",
+        passed: false,
+        error: message,
+        requiredPermission: "Zone > Zone Settings > Read",
+      });
+    }
+
+    if (currentLevel) {
+      try {
+        await cf.zones.setSecurityLevel(zone.cfZoneId, currentLevel as "under_attack" | "essentially_off" | "low" | "medium" | "high");
+        checks.push({
+          name: "Zone Settings (Edit)",
+          passed: true,
+          requiredPermission: "Zone > Zone Settings > Edit",
+        });
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : "Unauthorized settings write";
+        checks.push({
+          name: "Zone Settings (Edit)",
+          passed: false,
+          error: message,
+          requiredPermission: "Zone > Zone Settings > Edit",
+        });
+      }
+    } else {
+      checks.push({
+        name: "Zone Settings (Edit)",
+        passed: false,
+        error: "Skipped edit permission check because read check failed.",
+        requiredPermission: "Zone > Zone Settings > Edit",
+      });
+    }
+  }
+
+  const allPassed = checks.every((c) => c.passed);
+  return { success: true, allPassed, checks };
+}
+
