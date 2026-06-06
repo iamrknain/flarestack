@@ -104,7 +104,7 @@ export default function DashboardOverviewPage() {
 
 
     return (
-        <div className="flex flex-col gap-4 sm:gap-6 pb-8 px-6 pt-6 w-full">
+        <div className="flex flex-col gap-4 sm:gap-6 pb-8 px-3 sm:px-6 pt-4 sm:pt-6 w-full">
             <header className="sticky top-0 z-20 bg-white/95 backdrop-blur-md border-b border-slate-200/60 py-3 flex flex-row gap-2 items-center w-full overflow-x-auto scrollbar-hide shrink-0">
                 <div className="ml-auto flex items-center gap-2">
                     <button
@@ -127,24 +127,17 @@ export default function DashboardOverviewPage() {
                 </div>
             </header>
 
-            {/* ─── Highlights / Last Audit logs ─── */}
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6 items-stretch">
                 
-                {/* Left side: Integrations & Overview Cards */}
-                <div className="lg:col-span-8 space-y-6">
-                    
-                    {/* ─── Protection Status by Zone/Project ─── */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Cloudflare Zone Protections */}
+                <div className={`${glassCls} p-3 sm:p-4 flex flex-col justify-between h-[650px]`}>
+                    <div className="flex flex-col flex-1 min-h-0">
+                        <h3 className="text-sm font-black text-slate-900 uppercase tracking-wider mb-4 flex items-center gap-2">
+                            <span className="w-2.5 h-2.5 rounded-full bg-orange-500 shrink-0" />
+                            Cloudflare Zone Protections
+                        </h3>
                         
-                        {/* Cloudflare Zone Protections */}
-                        <div className={`${glassCls} p-5 flex flex-col justify-between`}>
-                            <div>
-                                <h3 className="text-sm font-black text-slate-900 uppercase tracking-wider mb-4 flex items-center gap-2">
-                                    <span className="w-2.5 h-2.5 rounded-full bg-orange-500 shrink-0" />
-                                    Cloudflare Zone Protections
-                                </h3>
-                                
-                                <div className="space-y-4">
+                        <div className="space-y-4 overflow-y-auto flex-1 min-h-0 pr-1 custom-scrollbar">
                                     {cfZonesCount === 0 ? (
                                         <p className="text-xs text-slate-400 italic">No zones configured.</p>
                                     ) : (
@@ -153,7 +146,7 @@ export default function DashboardOverviewPage() {
                                             const liveZone = liveData?.cloudflare?.find((z: any) => z.id === zone.id);
 
                                             return (
-                                                <div key={zone.id} className="p-4 bg-slate-50/50 border border-slate-200/60 rounded-md space-y-3">
+                                                <div key={zone.id} className="p-2.5 sm:p-3 bg-slate-50/50 border border-slate-200/60 rounded-md space-y-2">
                                                     <div className="flex items-center justify-between gap-2 border-b border-slate-200/50 pb-2">
                                                         <span className="text-xs font-black text-slate-900 truncate" title={zone.domain || zone.name}>
                                                             {zone.name}
@@ -215,7 +208,7 @@ export default function DashboardOverviewPage() {
                                                                         </div>
                                                                         <div className="flex flex-col gap-1 items-end shrink-0">
                                                                             <div className="flex items-center gap-1 text-[9px]">
-                                                                                <span className="text-slate-400 font-bold uppercase tracking-wider text-[8px]">LIVE:</span>
+                                                                                <span className="text-slate-400 font-bold uppercase tracking-wider text-[8px] hidden sm:inline">LIVE:</span>
                                                                                 <span className={`font-black px-1.5 py-0.5 rounded border text-[8px] uppercase ${
                                                                                     isActive
                                                                                         ? "text-indigo-700 bg-indigo-50 border-indigo-200"
@@ -225,7 +218,7 @@ export default function DashboardOverviewPage() {
                                                                                 </span>
                                                                             </div>
                                                                             <div className="flex items-center gap-1 text-[9px]">
-                                                                                <span className="text-slate-400 font-bold uppercase tracking-wider text-[8px]">FLARESTACK:</span>
+                                                                                <span className="text-slate-400 font-bold uppercase tracking-wider text-[8px] hidden sm:inline">FLARESTACK:</span>
                                                                                 <span className={`font-black px-1.5 py-0.5 rounded border text-[8px] uppercase ${
                                                                                     rule.dbStatus === "ACTIVE"
                                                                                         ? "text-emerald-700 bg-emerald-50 border-emerald-200"
@@ -251,21 +244,21 @@ export default function DashboardOverviewPage() {
                             
                             <Link 
                                 href="/dashboard/cloudflare"
-                                className="mt-6 w-full text-center py-2 bg-slate-950 text-white rounded-md text-xs font-bold hover:bg-black transition-colors"
+                                className="mt-6 w-full text-center py-2 bg-slate-950 text-white rounded-md text-xs font-bold hover:bg-black transition-colors shrink-0"
                             >
                                 Manage Cloudflare
                             </Link>
                         </div>
 
                         {/* Vercel Project Protections */}
-                        <div className={`${glassCls} p-5 flex flex-col justify-between`}>
-                            <div>
+                        <div className={`${glassCls} p-3 sm:p-4 flex flex-col justify-between h-[650px]`}>
+                            <div className="flex flex-col flex-1 min-h-0">
                                 <h3 className="text-sm font-black text-slate-900 uppercase tracking-wider mb-4 flex items-center gap-2">
                                     <span className="w-2.5 h-2.5 rounded-full bg-blue-500 shrink-0" />
                                     Vercel Project Protections
                                 </h3>
                                 
-                                <div className="space-y-4">
+                                <div className="space-y-4 overflow-y-auto flex-1 min-h-0 pr-1 custom-scrollbar">
                                     {vercelProjectsCount === 0 ? (
                                         <p className="text-xs text-slate-400 italic">No projects configured.</p>
                                     ) : (
@@ -274,7 +267,7 @@ export default function DashboardOverviewPage() {
                                             const liveProj = liveData?.vercel?.find((p: any) => p.id === project.id);
 
                                             return (
-                                                <div key={project.id} className="p-4 bg-slate-50/50 border border-slate-200/60 rounded-md space-y-3">
+                                                <div key={project.id} className="p-2.5 sm:p-3 bg-slate-50/50 border border-slate-200/60 rounded-md space-y-2">
                                                     <div className="flex items-center justify-between gap-2 border-b border-slate-200/50 pb-2">
                                                         <span className="text-xs font-black text-slate-900 truncate" title={project.domain || project.name}>
                                                             {project.name}
@@ -337,7 +330,7 @@ export default function DashboardOverviewPage() {
                                                                         </div>
                                                                         <div className="flex flex-col gap-1 items-end shrink-0">
                                                                             <div className="flex items-center gap-1 text-[9px]">
-                                                                                <span className="text-slate-400 font-bold uppercase tracking-wider text-[8px]">LIVE:</span>
+                                                                                <span className="text-slate-400 font-bold uppercase tracking-wider text-[8px] hidden sm:inline">LIVE:</span>
                                                                                 <span className={`font-black px-1.5 py-0.5 rounded border text-[8px] uppercase ${
                                                                                     isActive
                                                                                         ? "text-indigo-700 bg-indigo-50 border-indigo-200"
@@ -347,7 +340,7 @@ export default function DashboardOverviewPage() {
                                                                                 </span>
                                                                             </div>
                                                                             <div className="flex items-center gap-1 text-[9px]">
-                                                                                <span className="text-slate-400 font-bold uppercase tracking-wider text-[8px]">FLARESTACK:</span>
+                                                                                <span className="text-slate-400 font-bold uppercase tracking-wider text-[8px] hidden sm:inline">FLARESTACK:</span>
                                                                                 <span className={`font-black px-1.5 py-0.5 rounded border text-[8px] uppercase ${
                                                                                     rule.dbStatus === "ACTIVE"
                                                                                         ? "text-emerald-700 bg-emerald-50 border-emerald-200"
@@ -378,13 +371,9 @@ export default function DashboardOverviewPage() {
                                 Manage Vercel
                             </Link>
                         </div>
-                        
-                    </div>
-
-                </div>
 
                 {/* Right side: Combined Recent Actions list */}
-                <div className="lg:col-span-4 h-[500px]">
+                <div className="h-[650px]">
                     <RecentActions 
                         actions={combinedActions} 
                         zones={cfData?.zones || []}
