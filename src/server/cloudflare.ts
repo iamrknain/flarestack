@@ -51,10 +51,10 @@ export async function getListsAction(accountRef: string, apiTokenOverride?: stri
   }
 }
 
-export async function getListItemsAction(accountRef: string, listId: string, limit = 10) {
+export async function getListItemsAction(accountRef: string, listId: string, limit?: number, search?: string) {
   try {
     const { cf } = await getClient(accountRef);
-    return await cf.lists.getItems(listId, limit);
+    return await cf.lists.getItems(listId, limit, search);
   } catch (error: any) {
     return { error: error.message || "Failed to fetch list items" };
   }
@@ -76,14 +76,17 @@ export async function addListItemsAction(accountRef: string, listId: string, ite
   }
 }
 
-export async function deleteListItemsAction(accountRef: string, listId: string, itemIds: string[]) {
+export async function deleteListItemsAction(accountRef: string, listId: string, itemIds: string[], ips?: string[]) {
   try {
     const { cf, db } = await getClient(accountRef);
     const cacheStore = new CacheStore(db);
     
-    const listItemsBefore = await cf.lists.getItems(listId);
-    const deletedItemMap = new Map<string, string | undefined>(listItemsBefore.map((i: ListItem) => [i.id, i.ip]));
-    const deletedIps = itemIds.map((id) => deletedItemMap.get(id)).filter((ip): ip is string => !!ip);
+    let deletedIps = ips || [];
+    if (!ips) {
+      const listItemsBefore = await cf.lists.getItems(listId);
+      const deletedItemMap = new Map<string, string | undefined>(listItemsBefore.map((i: ListItem) => [i.id, i.ip]));
+      deletedIps = itemIds.map((id) => deletedItemMap.get(id)).filter((ip): ip is string => !!ip);
+    }
 
     const operationIds = await cf.lists.deleteItems(listId, itemIds);
 
@@ -913,6 +916,52 @@ export async function editWafRuleAction(ruleId: string, data: {
     .where(and(eq(wafRules.id, ruleId), eq(wafRules.userId as any, userId)) as any);
 
   return { success: true };
+}
+
+export async function fetchIpDetailsAction(ip: string) {
+  const cleanIp = ip.split("/")[0].trim();
+  const reqHeaders = await headers();
+  const cookieHeader = reqHeaders.get("cookie") || undefined;
+  const sessionData = await getSession(cookieHeader);
+  if (!sessionData?.user) {
+    return { error: "Unauthorized. Please log in." };
+  }
+
+  try {
+    const res = await fetch(`https://ipapi.co/${cleanIp}/json/`);
+    if (!res.ok) throw new Error("ipapi.co failed");
+    const data = await res.json();
+    if (data.error) throw new Error(data.reason || "ipapi.co returned error");
+    return data;
+  } catch (err) {
+    try {
+      const res = await fetch(`https://freeipapi.com/api/json/${cleanIp}`);
+      if (!res.ok) throw new Error("freeipapi failed");
+      const data = await res.json();
+      return {
+        ip: data.ipAddress || cleanIp,
+        network: data.ipAddress,
+        version: data.ipVersion === 4 ? "IPv4" : "IPv6",
+        city: data.cityName,
+        region: data.regionName,
+        country_name: data.countryName,
+        country_code: data.countryCode,
+        latitude: data.latitude ?? data.lat,
+        longitude: data.longitude ?? data.lon,
+        timezone: data.timeZone,
+        asn: data.asn ? `AS${data.asn}` : undefined,
+        org: data.isp || data.organizationName,
+        country_capital: "",
+        country_tld: "",
+        country_calling_code: "",
+        currency_name: "",
+        languages: "",
+        utc_offset: ""
+      };
+    } catch (fallbackErr) {
+      return { ip: cleanIp, error: "Unable to retrieve IP details" };
+    }
+  }
 }
 
 

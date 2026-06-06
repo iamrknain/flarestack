@@ -87,13 +87,18 @@ export class ListsApi extends CloudflareApiBase {
      * Handles cursor-based pagination automatically.
      *
      * @param limit - Optional cap on the number of items returned.
+     * @param search - Optional query string to filter list items (e.g. prefix match for IPs).
      */
-    async getItems(cfListId: string, limit?: number): Promise<ListItem[]> {
+    async getItems(cfListId: string, limit?: number, search?: string): Promise<ListItem[]> {
         const items: ListItem[] = [];
         let cursor: string | undefined;
 
         do {
-            const query = cursor ? `?cursor=${encodeURIComponent(cursor)}` : '';
+            const params: string[] = [];
+            if (cursor) params.push(`cursor=${encodeURIComponent(cursor)}`);
+            if (search) params.push(`search=${encodeURIComponent(search)}`);
+
+            const query = params.length > 0 ? `?${params.join('&')}` : '';
             const endpoint = `/accounts/${this.cfAccountId}/rules/lists/${cfListId}/items${query}`;
             const payload = await this.fetchRestFull<ListItem[]>(endpoint);
 

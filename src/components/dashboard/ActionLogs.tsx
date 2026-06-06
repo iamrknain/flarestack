@@ -125,6 +125,19 @@ export function ActionLogs({
                     ))}
                 </select>
 
+                {/* Date picker */}
+                <div className="shrink-0">
+                    <DateRangePicker
+                        value={dateRange}
+                        onChange={onDateRangeChange}
+                        isLoading={isFetching}
+                        liveLabel="Live Logs"
+                        align="left"
+                    />
+                </div>
+
+                <div className="w-px h-6 bg-slate-200 shrink-0 hidden sm:block" />
+
                 {/* Search & Deep Search Group */}
                 <div className="flex items-center gap-1.5 shrink-0 w-full sm:w-auto">
                     <div className="relative w-full sm:w-[220px] rounded-md border border-slate-200 ">
@@ -144,7 +157,7 @@ export function ActionLogs({
                     <button
                         onClick={onDeepSearch}
                         disabled={isFetching || !searchQuery.trim()}
-                        className="flex items-center justify-center gap-1 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed text-white text-[10px] font-black uppercase tracking-wider px-3 h-[34px] rounded-md transition-all active:scale-95 whitespace-nowrap"
+                        className="flex items-center justify-center gap-1 bg-violet-50 hover:bg-violet-100 border border-violet-200/50 text-violet-700 hover:text-violet-900 disabled:opacity-40 disabled:cursor-not-allowed text-[10px] font-black uppercase tracking-wider px-3 h-[34px] rounded-md transition-all active:scale-95 shadow-sm whitespace-nowrap"
                         title="Search directly in the database"
                     >
                         <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
@@ -161,19 +174,6 @@ export function ActionLogs({
                             Clear DB Filter
                         </button>
                     )}
-                </div>
-
-                <div className="w-px h-6 bg-slate-200 shrink-0 hidden sm:block" />
-
-                {/* Date picker */}
-                <div className="shrink-0">
-                    <DateRangePicker
-                        value={dateRange}
-                        onChange={onDateRangeChange}
-                        isLoading={isFetching}
-                        liveLabel="Live Logs"
-                        align="left"
-                    />
                 </div>
 
                 {selectedIds.length > 0 && (

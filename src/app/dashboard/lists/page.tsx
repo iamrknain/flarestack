@@ -13,7 +13,7 @@ export default function ListsPage() {
     setLimit,
     isLoading,
     setIsPaused,
-  } = useDashboardState(10, "lists");
+  } = useDashboardState(10, "lists", { type: "relative", relativeValue: "24h", live: false, refreshInterval: 10 });
 
   const [data, setData] = useState<{
     accounts: any[];

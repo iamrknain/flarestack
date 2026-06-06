@@ -1,6 +1,17 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { DateRangePicker, type DateRange } from "~/components/DateRangePicker";
-import { getListsAction, getListItemsAction, deleteListItemsAction } from "~/server/cloudflare";
+import { getListsAction, getListItemsAction, deleteListItemsAction, addListItemsAction } from "~/server/cloudflare";
+import { IpLookupModal } from "~/components/dashboard/cloudflare/IpLookupModal";
+import { ListActionSelection, createCopyAction, createDeleteAction, createLookupAction } from "~/components/dashboard/cloudflare/ListActionSelection";
+
+const isValueQuery = (query: string): boolean => {
+    const trimmed = query.trim();
+    if (!trimmed) return true;
+    const ipRegex = /^[0-9a-fA-F.:/*\-]*$/;
+    const asnRegex = /^(as|AS)?[0-9]+$/;
+    const hostRegex = /^[a-zA-Z0-9-]+\.[a-zA-Z0-9.-]+$/;
+    return ipRegex.test(trimmed) || asnRegex.test(trimmed) || hostRegex.test(trimmed);
+};
 
 export function Lists({
     accounts,
@@ -31,6 +42,8 @@ export function Lists({
         return accounts[0]?.id || "";
     });
     const [lists, setLists] = useState<any[]>([]);
+    const [hasAttemptedAutoSelect, setHasAttemptedAutoSelect] = useState(false);
+    const [hasLoadedLists, setHasLoadedLists] = useState(false);
     const [selectedListId, setSelectedListId] = useState<string | null>(() => {
         if (typeof window !== "undefined") {
             return localStorage.getItem("flarestack_lists_selected_id");
@@ -39,24 +52,63 @@ export function Lists({
     });
     const [listItems, setListItems] = useState<any[]>([]);
     const [searchQuery, setSearchQuery] = useState("");
+    const [deepSearchActive, setDeepSearchActive] = useState(false);
     const [selectedItemIds, setSelectedItemIds] = useState<Set<string>>(new Set());
-    const [isActionDropdownOpen, setIsActionDropdownOpen] = useState(false);
-    const actionRef = useRef<HTMLDivElement>(null);
+    const [isIpLookupOpen, setIsIpLookupOpen] = useState(false);
+    const [copied, setCopied] = useState(false);
+    const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+    const [addValue, setAddValue] = useState("");
+    const [addComment, setAddComment] = useState("");
+    const [isAddingItem, setIsAddingItem] = useState(false);
+
+    const handleAddItemSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!selectedListId) return;
+        if (!addValue.trim()) return;
+
+        const currentList = lists.find(l => l.id === selectedListId);
+        const kind = currentList?.kind || 'ip';
+
+        setIsAddingItem(true);
+        try {
+            const itemPayload: any = {};
+            if (kind === 'ip') itemPayload.ip = addValue.trim();
+            else if (kind === 'asn') itemPayload.asn = parseInt(addValue.trim(), 10);
+            else if (kind === 'hostname') itemPayload.hostname = addValue.trim();
+            else itemPayload.ip = addValue.trim();
+
+            if (addComment.trim()) {
+                itemPayload.comment = addComment.trim();
+            }
+
+            const res = await addListItemsAction(selectedAccountRef, selectedListId, [itemPayload]);
+            if (res && "error" in res) {
+                alert(`Add Error: ${res.error}`);
+            } else if (res?.success) {
+                setAddValue("");
+                setAddComment("");
+                setIsAddModalOpen(false);
+                await handleFetchItems();
+            }
+        } catch (err: any) {
+            alert(`Failed to add item: ${err.message || err}`);
+        } finally {
+            setIsAddingItem(false);
+        }
+    };
+
+    const selectedIps = useMemo(() => {
+        return listItems
+            .filter(item => selectedItemIds.has(item.id))
+            .map(item => item.ip || item.asn?.toString() || item.hostname)
+            .filter((val): val is string => !!val);
+    }, [listItems, selectedItemIds]);
+
     const selectedItemsSizeRef = useRef(selectedItemIds.size);
 
     useEffect(() => {
         selectedItemsSizeRef.current = selectedItemIds.size;
     }, [selectedItemIds.size]);
-
-    useEffect(() => {
-        function handleClickOutside(event: MouseEvent) {
-            if (actionRef.current && !actionRef.current.contains(event.target as Node)) {
-                setIsActionDropdownOpen(false);
-            }
-        }
-        document.addEventListener("mousedown", handleClickOutside);
-        return () => document.removeEventListener("mousedown", handleClickOutside);
-    }, []);
 
     // Persist selections
     useEffect(() => {
@@ -68,6 +120,59 @@ export function Lists({
         }
     }, [selectedAccountRef, selectedListId]);
 
+    // Validate selectedAccountRef against accounts
+    useEffect(() => {
+        if (accounts.length > 0) {
+            const isValid = accounts.some(acc => acc.id === selectedAccountRef);
+            if (!isValid) {
+                setSelectedAccountRef(accounts[0].id);
+            }
+        } else {
+            setSelectedAccountRef("");
+        }
+    }, [accounts, selectedAccountRef]);
+
+    // Validate selectedListId against fetched lists
+    useEffect(() => {
+        if (lists.length > 0) {
+            const isValid = lists.some(list => list.id === selectedListId);
+            if (!isValid) {
+                setSelectedListId(lists[0].id);
+            }
+        } else {
+            setSelectedListId(null);
+        }
+    }, [lists, selectedListId]);
+
+    // Auto-select the first account that actually has lists
+    useEffect(() => {
+        if (accounts.length <= 1 || hasAttemptedAutoSelect || listsLoading || !hasLoadedLists) return;
+        
+        async function findFirstAccountWithLists() {
+            setHasAttemptedAutoSelect(true);
+            if (lists.length > 0) return;
+            
+            for (const acc of accounts) {
+                if (acc.id === selectedAccountRef) continue;
+                try {
+                    const data = await getListsAction(acc.id);
+                    if (data && !("error" in data) && data.length > 0) {
+                        setSelectedAccountRef(acc.id);
+                        setLists(data);
+                        setHasLoadedLists(true);
+                        return;
+                    }
+                } catch (e) {
+                    console.error("Auto-select list check failed:", e);
+                }
+            }
+        }
+        
+        if (selectedAccountRef && lists.length === 0) {
+            findFirstAccountWithLists();
+        }
+    }, [accounts, lists, listsLoading, hasLoadedLists, selectedAccountRef, hasAttemptedAutoSelect]);
+
     // Unified fetchers
     const handleFetchLists = async () => {
         if (!selectedAccountRef) return;
@@ -78,6 +183,7 @@ export function Lists({
                 console.error("Fetch lists error:", data.error);
             } else {
                 setLists(data);
+                setHasLoadedLists(true);
             }
         } catch (e) {
             console.error("Fetch lists error:", e);
@@ -86,11 +192,37 @@ export function Lists({
         }
     };
 
-    const handleFetchItems = async () => {
+    const handleFetchItems = async (isDeep = deepSearchActive, query = searchQuery) => {
         if (!selectedListId || !selectedAccountRef) return;
         setItemsLoading(true);
         try {
-            const data = await getListItemsAction(selectedAccountRef, selectedListId, limit);
+            const fetchLimit = isDeep ? undefined : limit;
+            const isIpPrefix = /^[a-fA-F0-9.:]+$/.test(query.trim());
+            const searchParam = (isDeep && isIpPrefix) ? query.trim() : undefined;
+
+            const data = await getListItemsAction(selectedAccountRef, selectedListId, fetchLimit, searchParam);
+            if (data && "error" in data) {
+                console.error("Fetch items error:", data.error);
+            } else {
+                setListItems(data);
+            }
+        } catch (e) {
+            console.error("Fetch items error:", e);
+        } finally {
+            setItemsLoading(false);
+        }
+    };
+
+    const handleDeepSearch = async () => {
+        setDeepSearchActive(true);
+        await handleFetchItems(true, searchQuery);
+    };
+
+    const handleClearDeepSearch = async () => {
+        setDeepSearchActive(false);
+        setItemsLoading(true);
+        try {
+            const data = await getListItemsAction(selectedAccountRef, selectedListId!, limit);
             if (data && "error" in data) {
                 console.error("Fetch items error:", data.error);
             } else {
@@ -105,8 +237,18 @@ export function Lists({
 
     // Fetch lists when account changes
     useEffect(() => {
+        setLists([]);
+        setSelectedListId(null);
+        setListItems([]);
+        setSelectedItemIds(new Set());
+        setHasLoadedLists(false);
         handleFetchLists();
     }, [selectedAccountRef]);
+
+    // Reset selected items when list changes
+    useEffect(() => {
+        setSelectedItemIds(new Set());
+    }, [selectedListId]);
 
     // Auto-fetch items on selection, limit, or live update
     useEffect(() => {
@@ -137,6 +279,11 @@ export function Lists({
         onPauseChange?.(selectedItemIds.size > 0);
     }, [selectedItemIds.size, onPauseChange]);
 
+    const selectedList = useMemo(() => {
+        return lists.find(l => l.id === selectedListId);
+    }, [lists, selectedListId]);
+    const isIpList = selectedList?.kind === 'ip';
+
     const startTime = useMemo(() => {
         if (dateRange.type === "all") return null;
         if (dateRange.type === "relative") {
@@ -162,6 +309,13 @@ export function Lists({
             items = items.filter(item => new Date(item.created_on).getTime() >= startTime);
         }
 
+        // Sort by Date Added (latest first)
+        items = [...items].sort((a, b) => {
+            const timeA = a.created_on ? new Date(a.created_on).getTime() : 0;
+            const timeB = b.created_on ? new Date(b.created_on).getTime() : 0;
+            return timeB - timeA;
+        });
+
         // Filter by Search Query
         if (!searchQuery) return items;
         const q = searchQuery.toLowerCase();
@@ -176,11 +330,16 @@ export function Lists({
     const handleBulkDelete = async () => {
         const ids = Array.from(selectedItemIds);
         if (ids.length === 0) return;
-        if (!confirm(`Are you sure you want to remove ${ids.length} selected entries?`)) return;
+        if (!confirm(`Are you sure you want to delete ${ids.length} selected entries from the Cloudflare list?`)) return;
 
         setDeleteLoading(true);
         try {
-            const data = await deleteListItemsAction(selectedAccountRef, selectedListId!, ids);
+            const ips = listItems
+                .filter(item => ids.includes(item.id))
+                .map(item => item.ip)
+                .filter((ip): ip is string => !!ip);
+
+            const data = await deleteListItemsAction(selectedAccountRef, selectedListId!, ids, ips);
             if (data && "error" in data) {
                 console.error("Delete items error:", data.error);
             } else if (data?.success) {
@@ -191,7 +350,47 @@ export function Lists({
         } finally {
             setDeleteLoading(false);
             setSelectedItemIds(new Set());
-            setIsActionDropdownOpen(false);
+        }
+    };
+
+    const handleBulkDeleteByIps = async (ips: string[]) => {
+        const cleanInputIps = ips.map(ip => ip.split("/")[0].trim());
+        const idsToDelete = listItems
+            .filter(item => {
+                const itemIp = item.ip || item.asn?.toString() || item.hostname;
+                if (!itemIp) return false;
+                const cleanItemIp = itemIp.split("/")[0].trim();
+                return cleanInputIps.includes(cleanItemIp);
+            })
+            .map(item => item.id);
+        
+        if (idsToDelete.length === 0) {
+            alert(`No matching items found in local list to delete.\nInput IPs: ${JSON.stringify(cleanInputIps)}\nAvailable items: ${JSON.stringify(listItems.map(i => i.ip || i.asn || i.hostname))}`);
+            return;
+        }
+
+        try {
+            const mappedIps = listItems
+                .filter(item => idsToDelete.includes(item.id))
+                .map(item => item.ip)
+                .filter((ip): ip is string => !!ip);
+
+            const data = await deleteListItemsAction(selectedAccountRef, selectedListId!, idsToDelete, mappedIps);
+            if (data && "error" in data) {
+                alert(`Delete API Error: ${data.error}`);
+                throw new Error(data.error);
+            } else if (data?.success) {
+                alert(`Successfully deleted ${idsToDelete.length} item(s) from Cloudflare!`);
+                await handleFetchItems();
+                setSelectedItemIds(prev => {
+                    const next = new Set(prev);
+                    idsToDelete.forEach(id => next.delete(id));
+                    return next;
+                });
+            }
+        } catch (e: any) {
+            alert(`Delete Exception: ${e.message || e}`);
+            throw e;
         }
     };
 
@@ -246,24 +445,6 @@ export function Lists({
                     ))}
                 </select>
 
-                <div className="w-px h-6 bg-slate-200 shrink-0 hidden sm:block mx-1" />
-
-                {/* Search */}
-                <div className="relative shrink-0 w-full sm:w-[200px] rounded-md border border-slate-200 ">
-                    <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none">
-                        <svg className="w-3.5 h-3.5 text-slate-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                            <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
-                        </svg>
-                    </div>
-                    <input
-                        type="text"
-                        placeholder="Search entries..."
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        className="block w-full h-[34px] pl-8 pr-3 text-[11px] font-bold bg-white/50 border-0 shadow-none rounded-md focus:ring-slate-950 placeholder:text-slate-400 placeholder:font-medium focus:outline-none"
-                    />
-                </div>
-
                 {/* Date Picker */}
                 <div className="shrink-0">
                     <DateRangePicker
@@ -277,91 +458,128 @@ export function Lists({
 
                 <div className="w-px h-6 bg-slate-200 shrink-0 hidden sm:block mx-1" />
 
-                {/* Selection bar — matches TopStatsExplorer */}
-                {selectedItemIds.size > 0 && (
-                    <div className="flex flex-wrap items-center gap-2 bg-indigo-50/50 border border-indigo-100/50 py-1 px-3 rounded-md animate-in fade-in slide-in-from-top-2 duration-300">
-                        {/* Count */}
-                        <div className="flex items-center gap-2">
-                            <span className="bg-white border border-indigo-200 text-indigo-700 text-[11px] font-black px-2 py-0.5 rounded-md tabular-nums shadow-sm select-none">{selectedItemIds.size}</span>
-                            <span className="text-[12px] font-bold text-indigo-900 select-none">selected</span>
-                        </div>
-
-                        <div className="w-px h-5 bg-indigo-200/60 mx-1" />
-
-                        {/* Action dropdown */}
-                        <div className="relative shrink-0 flex items-center gap-2" ref={actionRef}>
-                            <button
-                                onClick={() => setIsActionDropdownOpen(!isActionDropdownOpen)}
-                                className="flex items-center gap-2 px-3 h-[28px] text-[11px] font-bold bg-white border border-indigo-200 hover:border-indigo-300 rounded-md shadow-sm text-indigo-900 hover:bg-slate-50 transition-colors whitespace-nowrap"
-                            >
-                                Action
-                                <svg className={`w-3 h-3 text-indigo-400 transition-transform ${isActionDropdownOpen ? 'rotate-180' : ''}`} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="6 9 12 15 18 9" /></svg>
-                            </button>
-
-                            <button
-                                onClick={() => setSelectedItemIds(new Set())}
-                                className="text-[10px] font-black text-indigo-500 hover:text-indigo-700 uppercase tracking-widest px-2 transition-colors"
-                            >
-                                Clear
-                            </button>
-
-                            {isActionDropdownOpen && (
-                                <div className="absolute top-full mt-2 left-0 w-56 bg-white rounded-md shadow-xl border border-slate-200 z-50 flex flex-col p-2 gap-0.5 animate-in fade-in zoom-in-95 duration-100">
-                                    <div className="px-3 py-2 border-b border-slate-100 mb-1">
-                                        <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">Actions</div>
-                                    </div>
-                                    <button
-                                        onClick={handleBulkDelete}
-                                        className="flex items-center gap-3 text-left px-3 py-2 rounded-md transition-all hover:bg-rose-50 group/item"
-                                    >
-                                        <div className="w-6 h-6 rounded-md bg-rose-50 group-hover/item:bg-rose-100 flex items-center justify-center shrink-0">
-                                            <svg className="w-3.5 h-3.5 text-rose-500" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                                                <path d="M3 6h18m-2 0v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6m3 0V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2m-6 5v6m4-5v6" />
-                                            </svg>
-                                        </div>
-                                        <div>
-                                            <div className="text-[12px] font-bold text-rose-600">Delete Selected</div>
-                                            <div className="text-[10px] text-rose-400 font-medium">Remove {selectedItemIds.size} entries</div>
-                                        </div>
-                                    </button>
-                                </div>
-                            )}
-                        </div>
-                    </div>
-                )}
-
-                {/* Actions + Limit */}
-                <div className="flex items-center rounded-md overflow-hidden border border-slate-900 shadow-sm ml-auto shrink-0">
-                    <button
-                        onClick={handleRefresh}
-                        disabled={isRefreshing}
-                        className="flex items-center justify-center gap-1.5 bg-slate-950 hover:bg-black disabled:opacity-30 disabled:cursor-not-allowed text-white text-[10px] font-bold px-3 h-[34px] transition-colors active:scale-95 whitespace-nowrap"
-                    >
-                        {isRefreshing ? (
-                            <svg className="animate-spin h-3 w-3" viewBox="0 0 24 24">
-                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                {/* Search & Deep Search Group */}
+                <div className="flex items-center gap-1.5 shrink-0 w-full sm:w-auto">
+                    <div className="relative w-full sm:w-[200px] rounded-md border border-slate-200" title="Quick search filters the currently loaded items. Use Deep Search to search all of Cloudflare.">
+                        <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none">
+                            <svg className="w-3.5 h-3.5 text-slate-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
                             </svg>
-                        ) : (
-                            <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                                <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" /><path d="M3 3v5h5" /><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" /><path d="M16 16h5v5" />
-                            </svg>
-                        )}
-                        Sync
-                    </button>
-                    <div className="relative bg-slate-50 border-l border-slate-900/10 h-[34px] flex items-center">
+                        </div>
                         <input
-                            type="number"
-                            min={1}
-                            max={100}
-                            value={limit}
-                            onChange={(e) => onLimitChange(Number(e.target.value))}
-                            className="h-full pl-2.5 pr-8 text-[11px] font-bold bg-transparent border-0 shadow-none [appearance:textfield] focus:ring-0 text-slate-900 focus:outline-none"
+                            type="text"
+                            placeholder="Search entries..."
+                            value={searchQuery}
+                            onChange={(e) => {
+                                const val = e.target.value;
+                                  setSearchQuery(val);
+                                  if (!val.trim() && deepSearchActive) {
+                                      handleClearDeepSearch();
+                                  }
+                            }}
+                            className="block w-full h-[34px] pl-8 pr-3 text-[11px] font-bold bg-white/50 border-0 shadow-none rounded-md focus:ring-slate-950 placeholder:text-slate-400 placeholder:font-medium focus:outline-none"
                         />
-                        <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[8px] font-black text-slate-400 uppercase pointer-events-none">
-                            MAX
-                        </span>
                     </div>
+                    <div className="flex items-center rounded-md overflow-hidden border border-violet-200/50 shadow-sm h-[34px] bg-violet-50">
+                        <button
+                            onClick={handleDeepSearch}
+                            disabled={itemsLoading || !searchQuery.trim()}
+                            className="flex items-center justify-center gap-1 bg-violet-50 hover:bg-violet-100 disabled:opacity-40 disabled:cursor-not-allowed text-violet-700 hover:text-violet-900 text-[10px] font-black uppercase tracking-wider px-3 h-full transition-colors active:scale-95 whitespace-nowrap focus:outline-none"
+                            title="Search all matches in Cloudflare. Note: IP/value search is fast, but description (comment) search scans all items and takes longer."
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="m21 21-6-6m2-5a7 7 0 1 1-14 0 7 7 0 0 1 14 0z" />
+                            </svg>
+                            Deep Search
+                        </button>
+                        {!isValueQuery(searchQuery) && searchQuery.trim() && (
+                            <button
+                                type="button"
+                                className="flex items-center justify-center w-[30px] h-full bg-amber-50 hover:bg-amber-100 border-l border-violet-200/50 text-amber-700 transition-colors shrink-0 focus:outline-none"
+                                title="Note: IP/value search is fast, but description (comment) search scans all items and takes longer."
+                                onClick={() => alert("Cloudflare only indexes list items by IP/value. Searching descriptions (comments) requires scanning all pages of items, which can take significantly longer.")}
+                            >
+                                <svg className="w-4 h-4 shrink-0 text-amber-600" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                    <circle cx="12" cy="12" r="10" />
+                                    <line x1="12" y1="16" x2="12" y2="12" />
+                                    <line x1="12" y1="8" x2="12.01" y2="8" />
+                                </svg>
+                            </button>
+                        )}
+                    </div>
+                    {deepSearchActive && (
+                        <button
+                            onClick={handleClearDeepSearch}
+                            className="flex items-center justify-center text-rose-600 hover:text-rose-800 text-[10px] font-black uppercase px-2 h-[34px] transition-colors"
+                            title="Clear deep search filter"
+                        >
+                            Clear Deep Search
+                        </button>
+                    )}
+                </div>
+
+                <div className="w-px h-6 bg-slate-200 shrink-0 hidden sm:block mx-1" />
+
+                <ListActionSelection
+                    selectedCount={selectedItemIds.size}
+                    onClear={() => setSelectedItemIds(new Set())}
+                    placement="bottom"
+                    actions={[
+                        createCopyAction(selectedIps, () => {
+                            setCopied(true);
+                            setTimeout(() => setCopied(false), 2000);
+                        }),
+                        createLookupAction(selectedItemIds.size, () => setIsIpLookupOpen(true)),
+                        createDeleteAction(selectedItemIds.size, handleBulkDelete, deleteLoading)
+                    ]}
+                />
+
+                {/* Actions + Limit + Add */}
+                <div className="flex items-center gap-2 ml-auto shrink-0">
+                    <div className="flex items-center rounded-md overflow-hidden border border-slate-900 shadow-sm">
+                        <button
+                            onClick={handleRefresh}
+                            disabled={isRefreshing}
+                            className="flex items-center justify-center gap-1.5 bg-slate-950 hover:bg-black disabled:opacity-30 disabled:cursor-not-allowed text-white text-[10px] font-bold px-3 h-[34px] transition-colors active:scale-95 whitespace-nowrap"
+                        >
+                            {isRefreshing ? (
+                                <svg className="animate-spin h-3 w-3" viewBox="0 0 24 24">
+                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                                </svg>
+                            ) : (
+                                <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                                    <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" /><path d="M3 3v5h5" /><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" /><path d="M16 16h5v5" />
+                                </svg>
+                            )}
+                            Sync
+                        </button>
+                        <div className="relative bg-slate-50 border-l border-slate-900/10 h-[34px] flex items-center">
+                            <input
+                                type="number"
+                                min={1}
+                                max={100}
+                                value={limit}
+                                onChange={(e) => onLimitChange(Number(e.target.value))}
+                                className="h-full pl-2.5 pr-8 text-[11px] font-bold bg-transparent border-0 shadow-none [appearance:textfield] focus:ring-0 text-slate-900 focus:outline-none"
+                            />
+                            <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[8px] font-black text-slate-400 uppercase pointer-events-none">
+                                MAX
+                            </span>
+                        </div>
+                    </div>
+
+                    <button
+                        onClick={() => setIsAddModalOpen(true)}
+                        disabled={!selectedListId}
+                        className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-30 disabled:cursor-not-allowed text-white text-[10px] font-bold px-3.5 h-[34px] rounded-md transition-all active:scale-95 shadow-sm hover:shadow-md whitespace-nowrap"
+                    >
+                        <svg className="w-3.5 h-3.5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                            <line x1="12" y1="5" x2="12" y2="19" />
+                            <line x1="5" y1="12" x2="19" y2="12" />
+                        </svg>
+                        Add Item
+                    </button>
                 </div>
             </header>
 
@@ -485,6 +703,95 @@ export function Lists({
                     </div>
                 )}
             </main>
+
+            <IpLookupModal
+                isOpen={isIpLookupOpen}
+                onClose={() => setIsIpLookupOpen(false)}
+                ipAddresses={selectedIps}
+                onDeleteSelected={handleBulkDeleteByIps}
+            />
+
+            {isAddModalOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/45 backdrop-blur-sm animate-in fade-in duration-150">
+                    <div className="bg-white rounded-xl shadow-2xl border border-slate-200 w-full max-w-md animate-in zoom-in-95 duration-200 overflow-hidden flex flex-col">
+                        <header className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+                            <h2 className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-2">
+                                <svg className="w-4 h-4 text-emerald-600" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                    <path d="M12 5v14m-7-7h14" />
+                                </svg>
+                                Add Item to List
+                            </h2>
+                            <button
+                                onClick={() => setIsAddModalOpen(false)}
+                                className="text-slate-400 hover:text-slate-600 transition-colors"
+                            >
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        </header>
+                        <form onSubmit={handleAddItemSubmit} className="p-5 flex flex-col gap-4">
+                            <div>
+                                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">
+                                    {(lists.find(l => l.id === selectedListId)?.kind || 'ip').toUpperCase()} Target
+                                </label>
+                                <input
+                                    type="text"
+                                    required
+                                    value={addValue}
+                                    onChange={(e) => setAddValue(e.target.value)}
+                                    placeholder={
+                                        (lists.find(l => l.id === selectedListId)?.kind || 'ip') === 'ip'
+                                            ? 'e.g. 1.1.1.1 or 192.168.1.0/24'
+                                            : (lists.find(l => l.id === selectedListId)?.kind || 'ip') === 'asn'
+                                            ? 'e.g. 13335'
+                                            : 'e.g. example.com'
+                                    }
+                                    className="w-full text-xs font-semibold bg-slate-50 border border-slate-200 focus:border-slate-400 rounded-md py-2 px-3 focus:outline-none transition-colors"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">
+                                    Comment (Optional)
+                                </label>
+                                <input
+                                    type="text"
+                                    value={addComment}
+                                    onChange={(e) => setAddComment(e.target.value)}
+                                    placeholder="Add description..."
+                                    className="w-full text-xs font-semibold bg-slate-50 border border-slate-200 focus:border-slate-400 rounded-md py-2 px-3 focus:outline-none transition-colors"
+                                />
+                            </div>
+                            <div className="flex items-center justify-end gap-2 mt-2">
+                                <button
+                                    type="button"
+                                    onClick={() => setIsAddModalOpen(false)}
+                                    className="px-4 py-2 text-xs font-bold text-slate-500 hover:text-slate-700 transition-colors"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="submit"
+                                    disabled={isAddingItem || !addValue.trim()}
+                                    className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white px-5 py-2 rounded-md text-xs font-bold transition-all active:scale-95 shadow-sm hover:shadow flex items-center gap-1.5"
+                                >
+                                    {isAddingItem ? (
+                                        <>
+                                            <svg className="animate-spin h-3.5 w-3.5" viewBox="0 0 24 24">
+                                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                                            </svg>
+                                            Adding...
+                                        </>
+                                    ) : (
+                                        'Add to List'
+                                    )}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
