@@ -194,6 +194,7 @@ export default function CloudflarePage() {
                             onAddRule={(zoneId: string) => setRuleModalZoneId(zoneId)}
                             onEditZone={(zone) => setEditingZone(zone)}
                             onEditRule={(rule) => setEditingRule(rule)}
+                            onRefresh={loadData}
                         />
                     </div>
                     <div className="relative w-full h-full min-h-[400px]">

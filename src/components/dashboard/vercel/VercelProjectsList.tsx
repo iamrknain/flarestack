@@ -10,7 +10,8 @@ export function VercelProjectsList({
     onAddProject,
     onAddRule,
     onEditRule,
-    onEditProject
+    onEditProject,
+    onRefresh
 }: {
     projects: any[];
     rules: any[];
@@ -20,6 +21,7 @@ export function VercelProjectsList({
     onAddRule: (projectId: string) => void;
     onEditRule?: (projectId: string, rule: any) => void;
     onEditProject?: (project: any) => void;
+    onRefresh?: () => void;
 }) {
     const router = useRouter();
     const [expandedProjects, setExpandedProjects] = useState<Record<string, boolean>>({});
@@ -52,6 +54,7 @@ export function VercelProjectsList({
 
             if (res?.success) {
                 router.refresh();
+                if (onRefresh) onRefresh();
             } else {
                 alert(res?.error || `Failed to perform ${intent}`);
             }

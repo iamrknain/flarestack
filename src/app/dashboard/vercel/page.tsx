@@ -224,6 +224,7 @@ export default function VercelPage() {
                                 setSelectedVercelProject(project);
                                 setIsVercelProjectModalOpen(true);
                             }}
+                            onRefresh={loadData}
                         />
                     </div>
                     <div className="relative w-full h-full min-h-[400px]">

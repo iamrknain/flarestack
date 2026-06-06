@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toggleZoneStatus, deleteZone, toggleCloudflareRuleStatus, deleteCloudflareRule } from "~/server/cloudflare";
 
-export function ZonesList({ zones, accounts, rules, onAddZone, onAddRule, onEditZone, onEditRule }: {
+export function ZonesList({ zones, accounts, rules, onAddZone, onAddRule, onEditZone, onEditRule, onRefresh }: {
     zones: any[];
     accounts: any[];
     rules: any[];
@@ -10,6 +10,7 @@ export function ZonesList({ zones, accounts, rules, onAddZone, onAddRule, onEdit
     onAddRule: (zoneId: string) => void;
     onEditZone?: (zone: any) => void;
     onEditRule?: (rule: any) => void;
+    onRefresh?: () => void;
 }) {
     const router = useRouter();
     const [expandedZones, setExpandedZones] = useState<Record<string, boolean>>({});
@@ -37,6 +38,7 @@ export function ZonesList({ zones, accounts, rules, onAddZone, onAddRule, onEdit
 
             if (res?.success) {
                 router.refresh();
+                if (onRefresh) onRefresh();
             } else {
                 alert(res?.error || `Failed to perform ${intent}`);
             }
