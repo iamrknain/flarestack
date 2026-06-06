@@ -5,7 +5,7 @@ import { TopStatsExplorer } from "~/components/dashboard/TopStatsExplorer";
 import { getIpsDataAction } from "~/server/cloudflare";
 import { useDashboardState } from "~/hooks/useDashboardState";
 
-export default function IpsPage() {
+export default function StatsPage() {
   const {
     dateRange,
     setDateRange,
@@ -15,7 +15,7 @@ export default function IpsPage() {
     setActiveZoneId,
     isLoading,
     setIsPaused,
-  } = useDashboardState(10, "ips");
+  } = useDashboardState(10, "stats", { type: "relative", relativeValue: "24h", live: false, refreshInterval: 15 });
 
   const [data, setData] = useState<{
     zones: any[];
@@ -34,6 +34,12 @@ export default function IpsPage() {
     }
     load();
   }, []);
+
+  useEffect(() => {
+    if (data?.zones && data.zones.length > 0 && !activeZoneId) {
+      setActiveZoneId(data.zones[0].id);
+    }
+  }, [data, activeZoneId, setActiveZoneId]);
 
   if (!data && fetching) {
     return (

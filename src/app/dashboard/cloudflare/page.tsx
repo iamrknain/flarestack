@@ -24,7 +24,7 @@ export default function CloudflarePage() {
         isLoading,
         handleRefresh,
         refreshTrigger,
-    } = useDashboardState(10, "cloudflare");
+    } = useDashboardState(10, "cloudflare", { type: "relative", relativeValue: "24h", live: false, refreshInterval: 15 });
 
     const [data, setData] = useState<{
         accounts: any[];
@@ -113,7 +113,7 @@ export default function CloudflarePage() {
                 </div>
             )}
 
-            <header className="sticky top-0 z-20 bg-white/95 backdrop-blur-md border-b border-slate-200/60 py-3 flex flex-row flex-wrap gap-2 items-center w-full">
+            <header className="sticky top-0 z-20 bg-white/95 backdrop-blur-md border-b border-slate-200/60 py-3 flex flex-row gap-2 items-center w-full overflow-x-auto scrollbar-hide">
                 <div className="shrink-0 flex items-center gap-2">
                     <DateRangePicker
                         value={dateRange}

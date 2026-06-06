@@ -199,7 +199,7 @@ export function TopStatsExplorer({
     return (
         <>
             <div className="flex flex-col gap-4 sm:gap-6">
-                <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-slate-200/60 px-3 sm:px-4 py-3 flex flex-row flex-wrap gap-2 items-center w-full">
+                <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-slate-200/60 px-2 sm:px-4 py-2 flex flex-row gap-1.5 items-center w-full overflow-x-auto scrollbar-hide">
 
                     {/* Dimensions */}
                     <div className="relative shrink-0" ref={dimensionsRef}>
@@ -216,7 +216,7 @@ export function TopStatsExplorer({
                             )}
                         </button>
                         {isDimensionsModalOpen && (
-                            <div className="absolute top-full mt-2 left-0 w-64 bg-white rounded-md shadow-xl border border-slate-200 overflow-hidden z-50 flex flex-col p-2 gap-1 animate-in fade-in zoom-in-95 duration-100">
+                            <div className="fixed sm:absolute top-auto mt-9 left-3 sm:left-0 w-64 bg-white rounded-md shadow-xl border border-slate-200 overflow-hidden z-50 flex flex-col p-2 gap-1 animate-in fade-in zoom-in-95 duration-100">
                                 <div className="px-3 py-2 border-b border-slate-100 mb-1">
                                     <div className="text-[10px] font-black uppercase tracking-widest">Grouping Dimensions</div>
                                     <div className="text-[9px] font-medium text-slate-800 leading-tight mt-0.5 italic">Select dimensions then click 'Fetch' to update.</div>
@@ -347,7 +347,7 @@ export function TopStatsExplorer({
                                 <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
                                     <path d="m21 21-6-6m2-5a7 7 0 1 1-14 0 7 7 0 0 1 14 0z" />
                                 </svg>
-                                Deep Search
+                                Search
                             </button>
                         </div>
                         {deepSearchActive && (
@@ -437,7 +437,7 @@ export function TopStatsExplorer({
                             </div>
                         ) : (
                             <div className="relative overflow-x-auto custom-scrollbar bg-white border border-slate-200 shadow-sm ">
-                                <table className="w-full min-w-max text-left border-collapse">
+                                <table className="w-full min-w-max md:min-w-full text-left border-collapse">
                                     <thead className="bg-slate-50/95 backdrop-blur-sm border-b border-slate-100 sticky top-0 z-20">
                                         <tr>
                                             <th className="px-6 py-5 text-center w-12">

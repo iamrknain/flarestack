@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from "react";
+import { createPortal } from "react-dom";
 import { DateRangePicker, type DateRange } from "~/components/DateRangePicker";
 import { getListsAction, getListItemsAction, deleteListItemsAction, addListItemsAction, syncListItemsCacheAction, clearListItemsCacheAction, getListCacheStatusAction } from "~/server/cloudflare";
 import { IpLookupModal } from "~/components/dashboard/cloudflare/IpLookupModal";
@@ -67,6 +68,30 @@ export function Lists({
     const [isCachePopoverOpen, setIsCachePopoverOpen] = useState(false);
     const [isFetchDropdownOpen, setIsFetchDropdownOpen] = useState(false);
     const [searchError, setSearchError] = useState<string | null>(null);
+
+    const [mounted, setMounted] = useState(false);
+    const cacheButtonRef = useRef<HTMLButtonElement>(null);
+    const fetchButtonRef = useRef<HTMLButtonElement>(null);
+    const [cacheRect, setCacheRect] = useState<DOMRect | null>(null);
+    const [fetchRect, setFetchRect] = useState<DOMRect | null>(null);
+
+    useEffect(() => {
+        setMounted(true);
+    }, []);
+
+    const toggleCachePopover = () => {
+        if (!isCachePopoverOpen && cacheButtonRef.current) {
+            setCacheRect(cacheButtonRef.current.getBoundingClientRect());
+        }
+        setIsCachePopoverOpen(v => !v);
+    };
+
+    const toggleFetchDropdown = () => {
+        if (!isFetchDropdownOpen && fetchButtonRef.current) {
+            setFetchRect(fetchButtonRef.current.getBoundingClientRect());
+        }
+        setIsFetchDropdownOpen(v => !v);
+    };
 
     const handleAddItemSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -154,11 +179,11 @@ export function Lists({
     // Auto-select the first account that actually has lists
     useEffect(() => {
         if (accounts.length <= 1 || hasAttemptedAutoSelect || listsLoading || !hasLoadedLists) return;
-        
+
         async function findFirstAccountWithLists() {
             setHasAttemptedAutoSelect(true);
             if (lists.length > 0) return;
-            
+
             for (const acc of accounts) {
                 if (acc.id === selectedAccountRef) continue;
                 try {
@@ -174,7 +199,7 @@ export function Lists({
                 }
             }
         }
-        
+
         if (selectedAccountRef && lists.length === 0) {
             findFirstAccountWithLists();
         }
@@ -499,7 +524,7 @@ export function Lists({
 
     return (
         <div className="flex flex-col gap-4 sm:gap-6">
-            <header className="sticky top-0 z-20 bg-white/95 backdrop-blur-md border-b border-slate-200/60 px-3 sm:px-4 py-3 flex flex-row flex-wrap gap-2 items-center w-full">
+            <header className="sticky top-0 z-20 bg-white sm:bg-white/95 sm:backdrop-blur-md border-b border-slate-200/60 px-2 sm:px-4 py-2 flex flex-row gap-1.5 items-center w-full overflow-x-auto scrollbar-hide">
                 {/* Account Selection */}
                 <select
                     value={selectedAccountRef}
@@ -538,7 +563,7 @@ export function Lists({
                 <div className="w-px h-6 bg-slate-200 shrink-0 hidden sm:block mx-1" />
 
                 {/* Search & Deep Search Group */}
-                <div className="flex items-center gap-1.5 shrink-0 w-full sm:w-auto">
+                <div className="flex items-center gap-1.5 shrink-0 w-[180px] sm:w-auto">
                     <div className="relative w-full sm:w-[200px] rounded-md border border-slate-200" title="Quick search filters the currently loaded items. Use Deep Search to search all of Cloudflare.">
                         <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none">
                             <svg className="w-3.5 h-3.5 text-slate-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -551,10 +576,10 @@ export function Lists({
                             value={searchQuery}
                             onChange={(e) => {
                                 const val = e.target.value;
-                                  setSearchQuery(val);
-                                  if (!val.trim() && deepSearchActive) {
-                                      handleClearDeepSearch();
-                                  }
+                                setSearchQuery(val);
+                                if (!val.trim() && deepSearchActive) {
+                                    handleClearDeepSearch();
+                                }
                             }}
                             className="block w-full h-[34px] pl-8 pr-3 text-[11px] font-bold bg-white/50 border-0 shadow-none rounded-md focus:ring-slate-950 placeholder:text-slate-400 placeholder:font-medium focus:outline-none"
                         />
@@ -569,7 +594,7 @@ export function Lists({
                             <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
                                 <path d="m21 21-6-6m2-5a7 7 0 1 1-14 0 7 7 0 0 1 14 0z" />
                             </svg>
-                            Deep Search
+                            Search
                         </button>
                         {!isValueQuery(searchQuery) && searchQuery.trim() && (
                             <button
@@ -601,7 +626,7 @@ export function Lists({
                 {searchError && (
                     <div className="w-full flex items-center gap-2 px-3 py-2 rounded-md bg-amber-50 border border-amber-200 text-amber-800 text-[11px] font-medium">
                         <svg className="w-3.5 h-3.5 shrink-0 text-amber-500" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                            <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+                            <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
                         </svg>
                         <span className="flex-1">{searchError}</span>
                         <button
@@ -643,13 +668,13 @@ export function Lists({
                     {/* Cache button — opens status popover */}
                     <div className="relative flex items-center shrink-0">
                         <button
-                            onClick={() => setIsCachePopoverOpen(v => !v)}
+                            ref={cacheButtonRef}
+                            onClick={toggleCachePopover}
                             disabled={!selectedListId}
-                            className={`flex items-center gap-1.5 h-[34px] px-3 text-[10px] font-black tracking-wide transition-all rounded-md border shadow-sm disabled:cursor-not-allowed disabled:opacity-40 whitespace-nowrap active:scale-95 shrink-0 ${
-                                cacheStatus?.cached
-                                    ? 'bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-600'
-                                    : 'bg-slate-100 hover:bg-slate-200 text-slate-600 border-slate-300'
-                            }`}
+                            className={`flex items-center gap-1.5 h-[34px] px-3 text-[10px] font-black tracking-wide transition-all rounded-md border shadow-sm disabled:cursor-not-allowed disabled:opacity-40 whitespace-nowrap active:scale-95 shrink-0 ${cacheStatus?.cached
+                                ? 'bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-600'
+                                : 'bg-slate-100 hover:bg-slate-200 text-slate-600 border-slate-300'
+                                }`}
                         >
                             {isSyncingCache || isClearingCache ? (
                                 <svg className="animate-spin h-3 w-3" viewBox="0 0 24 24">
@@ -658,34 +683,39 @@ export function Lists({
                                 </svg>
                             ) : (
                                 <svg xmlns="http://www.w3.org/2000/svg" width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                                    <ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.66 4.03 3 9 3s9-1.34 9-3V5"/><path d="M3 12c0 1.66 4.03 3 9 3s9-1.34 9-3"/>
+                                    <ellipse cx="12" cy="5" rx="9" ry="3" /><path d="M3 5v14c0 1.66 4.03 3 9 3s9-1.34 9-3V5" /><path d="M3 12c0 1.66 4.03 3 9 3s9-1.34 9-3" />
                                 </svg>
                             )}
                             <span>{cacheStatus?.cached ? cacheStatus.count.toLocaleString() : 'Cache'}</span>
                             <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
                                 className={`transition-transform duration-150 ml-0.5 ${isCachePopoverOpen ? 'rotate-180' : ''}`}>
-                                <polyline points="6 9 12 15 18 9"/>
+                                <polyline points="6 9 12 15 18 9" />
                             </svg>
                         </button>
 
                         {/* Cache Status Popover */}
-                        {isCachePopoverOpen && (
+                        {isCachePopoverOpen && mounted && createPortal(
                             <>
                                 {/* backdrop */}
                                 <div className="fixed inset-0 z-30" onClick={() => setIsCachePopoverOpen(false)} />
-                                <div className="absolute top-[calc(100%+6px)] right-0 z-40 w-64 bg-white rounded-lg border border-slate-200 shadow-xl overflow-hidden">
+                                <div
+                                    style={cacheRect ? {
+                                        position: 'fixed',
+                                        top: `${cacheRect.bottom + 6}px`,
+                                        right: `${window.innerWidth - cacheRect.right}px`,
+                                    } : undefined}
+                                    className="z-40 w-64 bg-white rounded-lg border border-slate-200 shadow-xl overflow-hidden animate-in fade-in zoom-in-95 duration-100"
+                                >
                                     {/* header */}
-                                    <div className={`flex items-center gap-2 px-3 py-2.5 ${
-                                        cacheStatus?.cached ? 'bg-emerald-50 border-b border-emerald-100' : 'bg-slate-50 border-b border-slate-100'
-                                    }`}>
+                                    <div className={`flex items-center gap-2 px-3 py-2.5 ${cacheStatus?.cached ? 'bg-emerald-50 border-b border-emerald-100' : 'bg-slate-50 border-b border-slate-100'
+                                        }`}>
                                         <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
                                             className={cacheStatus?.cached ? 'text-emerald-600' : 'text-slate-400'}>
-                                            <ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.66 4.03 3 9 3s9-1.34 9-3V5"/><path d="M3 12c0 1.66 4.03 3 9 3s9-1.34 9-3"/>
+                                            <ellipse cx="12" cy="5" rx="9" ry="3" /><path d="M3 5v14c0 1.66 4.03 3 9 3s9-1.34 9-3V5" /><path d="M3 12c0 1.66 4.03 3 9 3s9-1.34 9-3" />
                                         </svg>
                                         <span className="text-[11px] font-bold text-slate-700">List Cache</span>
-                                        <span className={`ml-auto text-[9px] font-black uppercase px-1.5 py-0.5 rounded-full ${
-                                            cacheStatus?.cached ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'
-                                        }`}>
+                                        <span className={`ml-auto text-[9px] font-black uppercase px-1.5 py-0.5 rounded-full ${cacheStatus?.cached ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'
+                                            }`}>
                                             {cacheStatus?.cached ? 'ACTIVE' : 'EMPTY'}
                                         </span>
                                     </div>
@@ -707,7 +737,7 @@ export function Lists({
                                         </div>
                                         <div className="flex items-start gap-1.5 bg-amber-50 border border-amber-100 rounded-md px-2.5 py-2 mt-0.5">
                                             <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-amber-500 shrink-0 mt-px">
-                                                <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+                                                <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
                                             </svg>
                                             <p className="text-[9px] text-amber-700 leading-relaxed">
                                                 {cacheStatus?.cached
@@ -730,7 +760,7 @@ export function Lists({
                                                 </svg>
                                             ) : (
                                                 <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                                                    <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/>
+                                                    <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" /><path d="M3 3v5h5" /><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" /><path d="M16 16h5v5" />
                                                 </svg>
                                             )}
                                             {cacheStatus?.cached ? 'Re-sync Cache' : 'Build Cache'}
@@ -748,7 +778,7 @@ export function Lists({
                                                     </svg>
                                                 ) : (
                                                     <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                                                        <path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>
+                                                        <path d="M3 6h18" /><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" /><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
                                                     </svg>
                                                 )}
                                                 Clear Cache
@@ -756,7 +786,8 @@ export function Lists({
                                         )}
                                     </div>
                                 </div>
-                            </>
+                            </>,
+                            document.body
                         )}
                     </div>
 
@@ -781,12 +812,13 @@ export function Lists({
                                 {fetchMode === 'cache' ? 'Fetch Cache' : 'Fetch Native'}
                             </button>
                             <button
+                                ref={fetchButtonRef}
                                 type="button"
-                                onClick={() => setIsFetchDropdownOpen(v => !v)}
+                                onClick={toggleFetchDropdown}
                                 className="flex items-center justify-center h-[34px] px-2 bg-slate-900 hover:bg-black text-white/80 border-l border-slate-800 transition-colors shrink-0"
                             >
                                 <svg xmlns="http://www.w3.org/2000/svg" width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={`transition-transform duration-150 ${isFetchDropdownOpen ? 'rotate-180' : ''}`}>
-                                    <polyline points="6 9 12 15 18 9"/>
+                                    <polyline points="6 9 12 15 18 9" />
                                 </svg>
                             </button>
                             <div className="relative bg-slate-50 border-l border-slate-900/10 h-[34px] flex items-center shrink-0">
@@ -805,10 +837,17 @@ export function Lists({
                         </div>
 
                         {/* Fetch Mode Dropdown Menu */}
-                        {isFetchDropdownOpen && (
+                        {isFetchDropdownOpen && mounted && createPortal(
                             <>
                                 <div className="fixed inset-0 z-30" onClick={() => setIsFetchDropdownOpen(false)} />
-                                <div className="absolute top-[calc(100%+4px)] left-0 z-40 w-44 bg-white rounded-md border border-slate-200 shadow-lg py-1 overflow-hidden">
+                                <div
+                                    style={fetchRect ? {
+                                        position: 'fixed',
+                                        top: `${fetchRect.bottom + 4}px`,
+                                        right: `${window.innerWidth - fetchRect.right}px`,
+                                    } : undefined}
+                                    className="z-40 w-44 bg-white rounded-md border border-slate-200 shadow-lg py-1 overflow-hidden animate-in fade-in zoom-in-95 duration-100"
+                                >
                                     <button
                                         type="button"
                                         onClick={() => {
@@ -817,11 +856,10 @@ export function Lists({
                                             // Trigger fetch in cache mode immediately:
                                             setTimeout(() => handleFetchItems(deepSearchActive, searchQuery, false), 0);
                                         }}
-                                        className={`w-full text-left px-3 py-2 text-[10px] font-bold transition-colors ${
-                                            fetchMode === 'cache'
-                                                ? 'bg-slate-100 text-slate-900'
-                                                : 'text-slate-600 hover:bg-slate-50'
-                                        }`}
+                                        className={`w-full text-left px-3 py-2 text-[10px] font-bold transition-colors ${fetchMode === 'cache'
+                                            ? 'bg-slate-100 text-slate-900'
+                                            : 'text-slate-600 hover:bg-slate-50'
+                                            }`}
                                     >
                                         Fetch Cache
                                         <p className="text-[8px] text-slate-400 font-normal mt-0.5">Reads from local database cache</p>
@@ -834,30 +872,31 @@ export function Lists({
                                             // Trigger fetch in native mode immediately:
                                             setTimeout(() => handleFetchItems(deepSearchActive, searchQuery, true), 0);
                                         }}
-                                        className={`w-full text-left px-3 py-2 text-[10px] font-bold transition-colors ${
-                                            fetchMode === 'native'
-                                                ? 'bg-slate-100 text-slate-900'
-                                                : 'text-slate-600 hover:bg-slate-50'
-                                        }`}
+                                        className={`w-full text-left px-3 py-2 text-[10px] font-bold transition-colors ${fetchMode === 'native'
+                                            ? 'bg-slate-100 text-slate-900'
+                                            : 'text-slate-600 hover:bg-slate-50'
+                                            }`}
                                     >
                                         Fetch Native (CF Only)
                                         <p className="text-[8px] text-slate-400 font-normal mt-0.5">Bypasses database, hits Cloudflare directly</p>
                                     </button>
                                 </div>
-                            </>
+                            </>,
+                            document.body
                         )}
                     </div>
 
                     <button
                         onClick={() => setIsAddModalOpen(true)}
                         disabled={!selectedListId}
-                        className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-30 disabled:cursor-not-allowed text-white text-[10px] font-bold px-3.5 h-[34px] rounded-md transition-all active:scale-95 shadow-sm hover:shadow-md whitespace-nowrap"
+                        className="flex items-center justify-center bg-emerald-600 hover:bg-emerald-700 disabled:opacity-30 disabled:cursor-not-allowed text-white w-[34px] h-[34px] rounded-md transition-all active:scale-95 shadow-sm hover:shadow-md shrink-0"
+                        title="Add Item"
                     >
                         <svg className="w-3.5 h-3.5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
                             <line x1="12" y1="5" x2="12" y2="19" />
                             <line x1="5" y1="12" x2="19" y2="12" />
                         </svg>
-                        Add Item
+
                     </button>
                 </div>
 
@@ -865,8 +904,8 @@ export function Lists({
 
             <main className="px-3 sm:px-4">
                 {selectedListId ? (
-                    <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
-                        <table className="w-full text-left border-collapse">
+                    <div className="bg-white border border-slate-200 rounded-xl overflow-x-auto custom-scrollbar shadow-sm">
+                        <table className="w-full min-w-max md:min-w-full text-left border-collapse">
                             <thead className="bg-slate-50 border-b border-slate-100">
                                 <tr>
                                     <th className="px-6 py-4 w-10">
@@ -1024,8 +1063,8 @@ export function Lists({
                                         (lists.find(l => l.id === selectedListId)?.kind || 'ip') === 'ip'
                                             ? 'e.g. 1.1.1.1 or 192.168.1.0/24'
                                             : (lists.find(l => l.id === selectedListId)?.kind || 'ip') === 'asn'
-                                            ? 'e.g. 13335'
-                                            : 'e.g. example.com'
+                                                ? 'e.g. 13335'
+                                                : 'e.g. example.com'
                                     }
                                     className="w-full text-xs font-semibold bg-slate-50 border border-slate-200 focus:border-slate-400 rounded-md py-2 px-3 focus:outline-none transition-colors"
                                 />

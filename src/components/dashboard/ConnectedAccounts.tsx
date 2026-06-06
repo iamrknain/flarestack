@@ -50,7 +50,7 @@ export function ConnectedAccounts({
     };
 
     return (
-        <div>
+        <div className="w-full min-w-0">
             <div className="flex items-center justify-between mb-4 px-1">
                 <h2 className="font-bold uppercase">
                     Connected {type === "cloudflare" ? "Cloudflare" : "Vercel"} Accounts
@@ -66,68 +66,74 @@ export function ConnectedAccounts({
                 </div>
             )}
 
-            <div className="flex flex-wrap items-center gap-3">
-                {accounts.map((account: any) => (
-                    <div
-                        key={account.id}
-                        className="flex items-center bg-gradient-to-br from-white to-indigo-50/50 border border-indigo-100 rounded-md shadow-sm overflow-hidden"
-                    >
-                        <div className="flex items-center gap-3 px-4 py-2.5">
-                            <span className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.3)] flex-shrink-0" />
-                            <span className="text-sm font-bold text-slate-900">{account.label}</span>
-                            {type === "cloudflare" ? (
-                                <span className="font-mono text-[10px] text-slate-400 font-bold uppercase tracking-tighter opacity-70 ml-1">
-                                    {account.cfAccountId.slice(0, 8)}…
-                                </span>
-                            ) : account.vercelTeamId ? (
-                                <span className="font-mono text-[10px] text-slate-400 font-bold uppercase tracking-tighter opacity-70 ml-1">
-                                    {account.vercelTeamId.slice(0, 8)}…
-                                </span>
-                            ) : (
-                                <span className="font-mono text-[10px] text-slate-400 font-bold uppercase tracking-tighter opacity-70 ml-1">
-                                    Personal
-                                </span>
-                            )}
-                        </div>
-                        {onEdit && (
-                            <button
-                                type="button"
-                                title="Edit account"
-                                onClick={() => onEdit(account)}
-                                className="h-[38px] px-3 py-2.5 border-l border-indigo-100/50 text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 transition-colors shrink-0 flex items-center justify-center"
-                            >
-                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                                    <path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
-                                </svg>
-                            </button>
-                        )}
-                        <form
-                            onSubmit={(e) => handleDelete(e, account.id, account.label)}
-                            className="h-[38px] shrink-0"
+            <div className="flex flex-col md:flex-row md:items-center md:flex-wrap gap-3 w-full min-w-0">
+                {/* Row 1: Accounts horizontal scrollable row with hidden scrollbars on mobile, auto-width wrap on desktop */}
+                <div className="flex items-center gap-3 overflow-x-auto no-scrollbar scroll-smooth w-full md:w-auto md:overflow-visible pb-1.5 md:pb-0">
+                    {accounts.map((account: any) => (
+                        <div
+                            key={account.id}
+                            className="flex items-center bg-gradient-to-br from-white to-indigo-50/50 border border-indigo-100 rounded-md shadow-sm overflow-hidden flex-shrink-0"
                         >
-                            <button
-                                type="submit"
-                                title="Remove account"
-                                disabled={deletingId === account.id}
-                                className="h-full px-3 py-2.5 border-l border-indigo-100/50 text-rose-500 hover:text-rose-700 hover:bg-rose-50 transition-colors disabled:opacity-50 flex items-center justify-center"
+                            <div className="flex items-center gap-3 px-4 py-2.5">
+                                <span className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.3)] flex-shrink-0" />
+                                <span className="text-sm font-bold text-slate-900">{account.label}</span>
+                                {type === "cloudflare" ? (
+                                    <span className="font-mono text-[10px] text-slate-400 font-bold uppercase tracking-tighter opacity-70 ml-1">
+                                        {account.cfAccountId.slice(0, 8)}…
+                                    </span>
+                                ) : account.vercelTeamId ? (
+                                    <span className="font-mono text-[10px] text-slate-400 font-bold uppercase tracking-tighter opacity-70 ml-1">
+                                        {account.vercelTeamId.slice(0, 8)}…
+                                    </span>
+                                ) : (
+                                    <span className="font-mono text-[10px] text-slate-400 font-bold uppercase tracking-tighter opacity-70 ml-1">
+                                        Personal
+                                    </span>
+                                )}
+                            </div>
+                            {onEdit && (
+                                <button
+                                    type="button"
+                                    title="Edit account"
+                                    onClick={() => onEdit(account)}
+                                    className="h-[38px] px-3 py-2.5 border-l border-indigo-100/50 text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 transition-colors shrink-0 flex items-center justify-center"
+                                >
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                        <path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
+                                    </svg>
+                                </button>
+                            )}
+                            <form
+                                onSubmit={(e) => handleDelete(e, account.id, account.label)}
+                                className="h-[38px] shrink-0"
                             >
-                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                                    <path d="M3 6h18" /><path d="M19 6l-1 14H6L5 6" /><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" /><line x1="10" y1="11" x2="10" y2="17" /><line x1="14" y1="11" x2="14" y2="17" />
-                                </svg>
-                            </button>
-                        </form>
-                    </div>
-                ))}
+                                <button
+                                    type="submit"
+                                    title="Remove account"
+                                    disabled={deletingId === account.id}
+                                    className="h-full px-3 py-2.5 border-l border-indigo-100/50 text-rose-500 hover:text-rose-700 hover:bg-rose-50 transition-colors disabled:opacity-50 flex items-center justify-center"
+                                >
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                        <path d="M3 6h18" /><path d="M19 6l-1 14H6L5 6" /><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" /><line x1="10" y1="11" x2="10" y2="17" /><line x1="14" y1="11" x2="14" y2="17" />
+                                    </svg>
+                                </button>
+                            </form>
+                        </div>
+                    ))}
+                </div>
 
-                <button
-                    onClick={onAdd}
-                    className="flex items-center gap-1.5 px-4 h-[42px] rounded-md text-xs font-black uppercase tracking-widest text-indigo-600 border-2 border-dashed border-indigo-200 hover:border-indigo-400 hover:bg-indigo-50 transition-all active:scale-95"
-                >
-                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                        <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
-                    </svg>
-                    Add {type === "cloudflare" ? "Cloudflare" : "Vercel"} Account
-                </button>
+                {/* Row 2: Add Account button (on mobile), sits in single line (on desktop) */}
+                <div className="pt-0.5 md:pt-0 shrink-0 w-full md:w-auto">
+                    <button
+                        onClick={onAdd}
+                        className="flex items-center justify-center gap-1.5 px-4 h-[42px] rounded-md text-xs font-black uppercase tracking-widest text-indigo-600 border-2 border-dashed border-indigo-200 hover:border-indigo-400 hover:bg-indigo-50 transition-all active:scale-95 w-full md:w-auto"
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                            <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+                        </svg>
+                        Add {type === "cloudflare" ? "Cloudflare" : "Vercel"} Account
+                    </button>
+                </div>
             </div>
         </div>
     );

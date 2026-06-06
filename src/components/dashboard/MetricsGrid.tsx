@@ -3,7 +3,7 @@ export function MetricsGrid({ count, activeRulesCount, type = 'zone' }: { count:
     const label = type === 'vercel' ? 'project' : 'zone';
 
     return (
-        <div className="flex items-center gap-3 px-4 py-3 bg-white border border-slate-200 rounded-md shadow-sm">
+        <div className="flex flex-col sm:flex-row sm:items-center items-start gap-2.5 sm:gap-3 px-4 py-3 bg-white border border-slate-200 rounded-md shadow-sm">
             {isActive ? (
                 <>
                     <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-emerald-50 border border-emerald-200 shrink-0">

@@ -37,8 +37,8 @@ export function Header({ onToggleSidebar, user }: HeaderProps) {
         } else if (activeTab === "vercel") {
             pageTitle = "Vercel";
             pageSubtext = "Manage edge bot protection, challenge mode, and request blocking configurations for your projects.";
-        } else if (activeTab === "ips") {
-            pageTitle = "Top Stats";
+        } else if (activeTab === "stats") {
+            pageTitle = "Stats";
             pageSubtext = "Analyze traffic patterns by IP, country, ASN and more. Take action on selected results.";
         } else if (activeTab === "logs") {
             pageTitle = "Action Logs";

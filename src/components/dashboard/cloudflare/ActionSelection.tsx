@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import { createPortal } from "react-dom";
 
 export interface SelectionAction {
     label: string;
@@ -98,12 +99,32 @@ export function ActionSelection({
 }) {
     const [isOpen, setIsOpen] = useState(false);
     const containerRef = useRef<HTMLDivElement>(null);
+    const triggerRef = useRef<HTMLButtonElement>(null);
+    const [triggerRect, setTriggerRect] = useState<DOMRect | null>(null);
+    const [mounted, setMounted] = useState(false);
+
+    useEffect(() => {
+        setMounted(true);
+    }, []);
+
+    const toggleOpen = () => {
+        if (!isOpen && triggerRef.current) {
+            setTriggerRect(triggerRef.current.getBoundingClientRect());
+        }
+        setIsOpen(!isOpen);
+    };
+
+    const dropdownRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
         const handleClickOutside = (e: MouseEvent) => {
-            if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-                setIsOpen(false);
+            if (containerRef.current?.contains(e.target as Node)) {
+                return;
             }
+            if (dropdownRef.current?.contains(e.target as Node)) {
+                return;
+            }
+            setIsOpen(false);
         };
         document.addEventListener("mousedown", handleClickOutside);
         return () => document.removeEventListener("mousedown", handleClickOutside);
@@ -150,22 +171,23 @@ export function ActionSelection({
     const dropdownPositionClass = placement === "top" ? `bottom-full mb-2 ${alignClass}` : `top-full mt-2 ${alignClass}`;
 
     return (
-        <div className="flex flex-wrap items-center gap-2 bg-indigo-50/50 border border-indigo-100/50 py-1 px-3 rounded-md animate-in fade-in duration-300">
+        <div className="flex flex-row items-center gap-2 bg-indigo-50/50 border border-indigo-100/50 py-1 px-3 rounded-md animate-in fade-in duration-300 shrink-0">
             {/* Count */}
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 shrink-0">
                 <span className="bg-white border border-indigo-200 text-indigo-700 text-[11px] font-black px-2 py-0.5 rounded-md tabular-nums shadow-sm select-none">
                     {selectedCount}
                 </span>
                 <span className="text-[12px] font-bold text-indigo-900 select-none">selected</span>
             </div>
 
-            <div className="w-px h-5 bg-indigo-200/60 mx-1" />
+            <div className="w-px h-5 bg-indigo-200/60 mx-1 shrink-0" />
 
             {/* Dropdown Container */}
             <div className="relative shrink-0 flex items-center gap-2" ref={containerRef}>
                 <button
-                    onClick={() => setIsOpen(!isOpen)}
-                    className="flex items-center gap-2 px-3 h-[28px] text-[11px] font-bold bg-white border border-indigo-200 hover:border-indigo-300 rounded-md shadow-sm text-indigo-900 hover:bg-slate-50 transition-colors whitespace-nowrap animate-in fade-in duration-150"
+                    ref={triggerRef}
+                    onClick={toggleOpen}
+                    className="flex items-center gap-2 px-3 h-[28px] text-[11px] font-bold bg-white border border-indigo-200 hover:border-indigo-300 rounded-md shadow-sm text-indigo-900 hover:bg-slate-50 transition-colors whitespace-nowrap animate-in fade-in duration-150 shrink-0"
                 >
                     Action
                     <svg
@@ -183,43 +205,59 @@ export function ActionSelection({
                 {onClear && (
                     <button
                         onClick={onClear}
-                        className="text-[10px] font-black text-indigo-500 hover:text-indigo-700 uppercase tracking-widest px-2 transition-colors"
+                        className="text-[10px] font-black text-indigo-500 hover:text-indigo-700 uppercase tracking-widest px-2 transition-colors shrink-0"
                     >
                         Clear
                     </button>
                 )}
 
                 {/* Dropdown Menu */}
-                {isOpen && (
-                    <div className={`absolute ${dropdownPositionClass} w-56 bg-white rounded-md shadow-xl border border-slate-200 z-50 flex flex-col p-2 gap-0.5 animate-in fade-in zoom-in-95 duration-100`}>
-                        <div className="px-3 py-2 border-b border-slate-100 mb-1">
-                            <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">Actions</div>
-                        </div>
+                {isOpen && mounted && createPortal(
+                    <>
+                        <div className="fixed inset-0 z-40" onClick={() => setIsOpen(false)} />
+                        <div
+                            ref={dropdownRef}
+                            style={triggerRect ? {
+                                position: 'fixed',
+                                top: `${triggerRect.bottom + 8}px`,
+                                ...(align === "right" ? {
+                                    right: `${window.innerWidth - triggerRect.right}px`
+                                } : {
+                                    left: `${triggerRect.left}px`
+                                })
+                            } : undefined}
+                            className="z-50 w-56 bg-white rounded-md shadow-xl border border-slate-200 flex flex-col p-2 gap-0.5 animate-in fade-in zoom-in-95 duration-100"
+                        >
+                            <div className="px-3 py-2 border-b border-slate-100 mb-1">
+                                <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">Actions</div>
+                            </div>
 
-                        {actions.map((action, idx) => {
-                            const colors = getThemeClasses(action.colorTheme);
-                            return (
-                                <button
-                                    key={idx}
-                                    onClick={async () => {
-                                        setIsOpen(false);
-                                        await action.onClick();
-                                    }}
-                                    className="flex items-center gap-3 text-left w-full px-3 py-2 rounded-md transition-all hover:bg-slate-50 group/item"
-                                >
-                                    <div className={`w-6 h-6 rounded-md ${colors.bg} flex items-center justify-center shrink-0`}>
-                                        <span className={colors.text}>{action.icon}</span>
-                                    </div>
-                                    <div className="flex-1 min-w-0">
-                                        <div className={`text-[12px] font-bold ${colors.text}`}>{action.label}</div>
-                                        {action.description && (
-                                            <div className={`text-[10px] font-medium ${colors.description}`}>{action.description}</div>
-                                        )}
-                                    </div>
-                                </button>
-                            );
-                        })}
-                    </div>
+                            {actions.map((action, idx) => {
+                                const colors = getThemeClasses(action.colorTheme);
+                                return (
+                                    <button
+                                        key={idx}
+                                        onClick={async () => {
+                                            setIsOpen(false);
+                                            await action.onClick();
+                                        }}
+                                        className="flex items-center gap-3 text-left w-full px-3 py-2 rounded-md transition-all hover:bg-slate-50 group/item"
+                                    >
+                                        <div className={`w-6 h-6 rounded-md ${colors.bg} flex items-center justify-center shrink-0`}>
+                                            <span className={colors.text}>{action.icon}</span>
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                            <div className={`text-[12px] font-bold ${colors.text}`}>{action.label}</div>
+                                            {action.description && (
+                                                <div className={`text-[10px] font-medium ${colors.description}`}>{action.description}</div>
+                                            )}
+                                        </div>
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    </>,
+                    document.body
                 )}
             </div>
         </div>

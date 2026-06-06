@@ -77,7 +77,7 @@ export function ActivityTable({
 
     return (
         <div className="relative overflow-x-auto custom-scrollbar bg-white border border-slate-200 shadow-sm ">
-            <table className="w-full min-w-max text-left border-collapse">
+            <table className="w-full min-w-max md:min-w-full text-left border-collapse">
                 <thead className="bg-slate-50/95 backdrop-blur-sm border-b border-slate-100 sticky top-0 z-10">
                     <tr>
                         {onToggleSelectAll && (
@@ -107,7 +107,11 @@ export function ActivityTable({
                             : zones.find((z: any) => z.id === log.resourceId)?.name || "Unknown Zone";
                         const isError = log.actionTaken?.endsWith('_ERROR');
                         return (
-                            <tr key={log.id} className={`transition-all group cursor-pointer hover:bg-slate-50/80 ${isError ? 'bg-rose-50/10' : ''}`}>
+                            <tr
+                                key={log.id}
+                                onClick={() => onToggleSelect?.(log.id)}
+                                className={`transition-all group cursor-pointer hover:bg-slate-50/80 ${selectedIds.includes(log.id) ? 'bg-indigo-50/30 hover:bg-indigo-50/45' : ''} ${isError ? 'bg-rose-50/10' : ''}`}
+                            >
                                 {onToggleSelect && (
                                     <td className="pl-6 pr-2 py-5 text-center" onClick={(e) => e.stopPropagation()}>
                                         <input
@@ -172,7 +176,7 @@ export function ActivityTable({
                                         )}
                                     </div>
                                 </td>
-                                <td className="px-6 py-5">
+                                <td className="px-6 py-5" onClick={(e) => e.stopPropagation()}>
                                     <div className="max-w-[300px] w-full bg-slate-50 border border-slate-200 rounded-md overflow-hidden flex flex-col shadow-sm">
                                         <div className="bg-slate-100/80 border-b border-slate-200 px-2 py-1 flex items-center justify-between shrink-0">
                                             <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Metadata</span>

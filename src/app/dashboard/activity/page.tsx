@@ -19,7 +19,7 @@ export default function ActivityPage() {
     handleRefresh,
     refreshTrigger,
     setIsPaused,
-  } = useDashboardState(100, "activity");
+  } = useDashboardState(100, "activity", { type: "relative", relativeValue: "24h", live: false, refreshInterval: 15 });
 
   const [data, setData] = useState<{
     zones: any[];

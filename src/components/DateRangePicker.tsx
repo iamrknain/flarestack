@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import { createPortal } from "react-dom";
 
 export type DateRange = {
     type: "relative" | "absolute" | "all";
@@ -48,6 +49,21 @@ export function DateRangePicker({
 }: DateRangePickerProps) {
     const [isOpen, setIsOpen] = useState(false);
     const containerRef = useRef<HTMLDivElement>(null);
+    const triggerRef = useRef<HTMLButtonElement>(null);
+    const dropdownRef = useRef<HTMLDivElement>(null);
+    const [triggerRect, setTriggerRect] = useState<DOMRect | null>(null);
+    const [mounted, setMounted] = useState(false);
+
+    useEffect(() => {
+        setMounted(true);
+    }, []);
+
+    const toggleOpen = () => {
+        if (!isOpen && triggerRef.current) {
+            setTriggerRect(triggerRef.current.getBoundingClientRect());
+        }
+        setIsOpen(!isOpen);
+    };
 
     const toLocalISO = (date?: Date) => {
         if (!date) return "";
@@ -72,9 +88,13 @@ export function DateRangePicker({
 
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
-            if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
-                setIsOpen(false);
+            if (containerRef.current?.contains(event.target as Node)) {
+                return;
             }
+            if (dropdownRef.current?.contains(event.target as Node)) {
+                return;
+            }
+            setIsOpen(false);
         };
         document.addEventListener("mousedown", handleClickOutside);
         return () => document.removeEventListener("mousedown", handleClickOutside);
@@ -122,10 +142,11 @@ export function DateRangePicker({
     return (
         <div className={`relative ${isOpen ? 'z-[45]' : ''}`} ref={containerRef}>
             <button
-                onClick={() => setIsOpen(!isOpen)}
-                className="flex items-center gap-2.5 h-10 px-4 bg-white border border-slate-200 rounded-md hover:bg-slate-50 hover:border-slate-300 transition-all shadow-sm active:scale-[0.98]"
+                ref={triggerRef}
+                onClick={toggleOpen}
+                className="flex items-center gap-1.5 h-[34px] px-2.5 bg-white border border-slate-200 rounded-md hover:bg-slate-50 hover:border-slate-300 transition-all shadow-sm active:scale-[0.98]"
             >
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5">
                     <svg
                         className={`transition-all duration-500 ${value.live ? "text-emerald-500" : "text-slate-400"} ${isLoading ? "animate-spin" : ""}`}
                         xmlns="http://www.w3.org/2000/svg"
@@ -159,177 +180,193 @@ export function DateRangePicker({
                 <svg className={`text-slate-400 transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`} xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9" /></svg>
             </button>
 
-            {isOpen && (
-                <div className={`absolute top-full mt-2 z-[45] bg-white border border-slate-200 rounded-md shadow-2xl shadow-slate-900/10 overflow-hidden flex flex-col md:flex-row ${showRelative && showAbsolute ? "min-w-[320px] md:min-w-[500px]" : "min-w-[240px]"} ${align === "right" ? "right-0" : "left-0"}`}>
-                    {/* Presets Sidebar */}
-                    {showRelative && (
-                        <div className="w-full md:w-48 bg-slate-50/50 border-b md:border-b-0 md:border-r border-slate-100 p-2 flex flex-col gap-1">
-                            <div className="px-3 py-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Time Presets</div>
-                            {PRESETS.map((preset) => (
+            {isOpen && mounted && createPortal(
+                <>
+                    <div className="fixed inset-0 z-[40]" onClick={() => setIsOpen(false)} />
+                    <div
+                        ref={dropdownRef}
+                        style={triggerRect ? {
+                            position: 'fixed',
+                            top: `${triggerRect.bottom + 8}px`,
+                            ...(align === "right" ? {
+                                right: `${window.innerWidth - triggerRect.right}px`
+                            } : {
+                                left: `${triggerRect.left}px`
+                            })
+                        } : undefined}
+                        className={`z-[45] bg-white border border-slate-200 rounded-md shadow-2xl shadow-slate-900/10 overflow-hidden flex flex-col md:flex-row ${showRelative && showAbsolute ? "min-w-[320px] md:min-w-[500px]" : "min-w-[240px]"} animate-in fade-in zoom-in-95 duration-100`}
+                    >
+                        {/* Presets Sidebar */}
+                        {showRelative && (
+                            <div className="w-full md:w-48 bg-slate-50/50 border-b md:border-b-0 md:border-r border-slate-100 p-1.5 flex flex-col gap-1">
+                                <div className="px-3 py-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Time Presets</div>
+                                {PRESETS.map((preset) => (
+                                    <button
+                                        key={preset.value}
+                                        onClick={() => handleRelativeSelect(preset)}
+                                        className={`w-full flex items-center px-4 py-1.5 text-sm font-medium rounded-md transition-all text-left ${value.type === "relative" && value.relativeValue === preset.value
+                                            ? "bg-slate-900 text-white shadow-md shadow-slate-900/10"
+                                            : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                                            }`}
+                                    >
+                                        {preset.label}
+                                    </button>
+                                ))}
+
+
+                                {showLive && (
+                                    <div className="mt-auto pt-2 border-t border-slate-100 md:block hidden">
+                                        <div className="flex items-center justify-between px-3 py-2">
+                                            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">{liveLabel}</span>
+                                            <button
+                                                onClick={() => onChange({ ...value, live: !value.live, refreshInterval: value.refreshInterval || 15 })}
+                                                className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${value.live ? "bg-emerald-500" : "bg-slate-200"}`}
+                                            >
+                                                <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${value.live ? "translate-x-5" : "translate-x-0.5"}`} />
+                                            </button>
+                                        </div>
+
+                                        {value.live && (
+                                            <div className="px-3 pb-3 pt-1">
+                                                <div className="grid grid-cols-4 gap-1 p-1 bg-slate-100/80 rounded-lg">
+                                                    {INTERVALS.map((interval) => (
+                                                        <button
+                                                            key={interval.value}
+                                                            onClick={() => onChange({ ...value, refreshInterval: interval.value })}
+                                                            className={`text-[10px] font-bold h-6 rounded-md transition-all ${value.refreshInterval === interval.value
+                                                                ? "bg-white text-slate-900 shadow-sm"
+                                                                : "text-slate-500 hover:text-slate-700"
+                                                                }`}
+                                                        >
+                                                            {interval.label}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        {/* Custom Range Area */}
+                        {showAbsolute && (
+                            <div className="flex-1 p-2.5 flex flex-col space-y-2.5">
                                 <button
-                                    key={preset.value}
-                                    onClick={() => handleRelativeSelect(preset)}
-                                    className={`w-full flex items-center px-4 py-2.5 text-sm font-medium rounded-md transition-all text-left ${value.type === "relative" && value.relativeValue === preset.value
-                                        ? "bg-slate-900 text-white shadow-md shadow-slate-900/10"
-                                        : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                                    onClick={handleClearFilter}
+                                    className={`w-full h-11 rounded-xl flex items-center justify-center gap-2.5 transition-all outline-none border ${value.type === "all"
+                                        ? "bg-slate-950 text-white border-slate-950 shadow-lg shadow-slate-900/10"
+                                        : "bg-indigo-50 border-indigo-200 text-indigo-600 hover:bg-indigo-100 hover:border-indigo-300 shadow-sm"
                                         }`}
                                 >
-                                    {preset.label}
+                                    <svg className="w-4 h-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                                        <circle cx="12" cy="12" r="10" />
+                                        <line x1="15" y1="9" x2="9" y2="15" />
+                                        <line x1="9" y1="9" x2="15" y2="15" />
+                                    </svg>
+                                    <span className="text-[13px] font-bold uppercase tracking-wider">All Time (No Filter)</span>
                                 </button>
-                            ))}
 
+                                <div className="h-px bg-slate-100 w-full !my-1.5" />
 
-                            {showLive && (
-                                <div className="mt-auto pt-2 border-t border-slate-100 md:block hidden">
-                                    <div className="flex items-center justify-between px-3 py-2">
-                                        <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">{liveLabel}</span>
-                                        <button
-                                            onClick={() => onChange({ ...value, live: !value.live, refreshInterval: value.refreshInterval || 15 })}
-                                            className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${value.live ? "bg-emerald-500" : "bg-slate-200"}`}
-                                        >
-                                            <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${value.live ? "translate-x-5" : "translate-x-0.5"}`} />
-                                        </button>
+                                <div className="space-y-1.5">
+                                    <h3 className="text-[11px] font-black text-slate-400 uppercase tracking-[0.2em]">Absolute time range</h3>
+
+                                    <div className="grid grid-cols-1 gap-1.5">
+                                        <div className="space-y-0.5">
+                                            <label className="text-[10px] font-bold text-slate-500 uppercase ml-1">From</label>
+                                            <div className="relative group">
+                                                <input
+                                                    type="datetime-local"
+                                                    value={tempStart}
+                                                    onChange={(e) => setTempStart(e.target.value)}
+                                                    className="w-full h-11 px-4 bg-white border border-slate-200 rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-slate-950/5 focus:border-slate-950 transition-all cursor-pointer text-slate-900"
+                                                />
+                                            </div>
+                                        </div>
+
+                                        <div className="space-y-0.5">
+                                            <label className="text-[10px] font-bold text-slate-500 uppercase ml-1">To</label>
+                                            <div className="relative group">
+                                                <input
+                                                    type="datetime-local"
+                                                    value={tempEnd}
+                                                    onChange={(e) => setTempEnd(e.target.value)}
+                                                    className="w-full h-11 px-4 bg-white border border-slate-200 rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-slate-950/5 focus:border-slate-950 transition-all cursor-pointer text-slate-900"
+                                                />
+                                            </div>
+                                        </div>
                                     </div>
+                                </div>
 
-                                    {value.live && (
-                                        <div className="px-3 pb-3 pt-1">
-                                            <div className="grid grid-cols-4 gap-1 p-1 bg-slate-100/80 rounded-lg">
+                                <button
+                                    onClick={handleApplyAbsolute}
+                                    disabled={!tempStart || !tempEnd}
+                                    className={`w-full h-11 rounded-xl text-sm font-bold transition-all active:scale-[0.98] outline-none border ${value.type === "absolute"
+                                        ? "bg-slate-950 text-white border-slate-950 shadow-lg shadow-slate-900/10"
+                                        : "bg-slate-50 border-slate-200 text-slate-600 hover:border-slate-900 hover:text-slate-900 hover:bg-slate-100 shadow-sm"
+                                        } disabled:opacity-50 disabled:active:scale-100`}
+                                >
+                                    {value.type === "absolute" ? "Absolute Range Active" : "Apply Custom Range"}
+                                </button>
+
+                                {tempStart && tempEnd && (
+                                    <div className="text-center !mt-1">
+                                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                                            Duration: {(() => {
+                                                const diffMs = new Date(tempEnd).getTime() - new Date(tempStart).getTime();
+                                                if (diffMs <= 0) return "Invalid range";
+                                                const diffMins = Math.floor(diffMs / 60000);
+                                                const days = Math.floor(diffMins / (24 * 60));
+                                                const hours = Math.floor((diffMins % (24 * 60)) / 60);
+                                                const mins = diffMins % 60;
+
+                                                const parts = [];
+                                                if (days > 0) parts.push(`${days}d`);
+                                                if (hours > 0) parts.push(`${hours}h`);
+                                                if (mins > 0 || parts.length === 0) parts.push(`${mins}m`);
+                                                return parts.join(" ");
+                                            })()}
+                                        </span>
+                                    </div>
+                                )}
+
+                                {/* Mobile Live Toggle */}
+                                {showLive && (
+                                    <div className="flex md:hidden flex-col pt-2 border-t border-slate-100 gap-2 !mt-2">
+                                        <div className="flex items-center justify-between">
+                                            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">{liveLabel}</span>
+                                            <button
+                                                onClick={() => onChange({ ...value, live: !value.live, refreshInterval: value.refreshInterval || 15 })}
+                                                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${value.live ? "bg-emerald-500" : "bg-slate-200"}`}
+                                            >
+                                                <span className={`inline-block h-4.5 w-4.5 transform rounded-full bg-white transition-transform ${value.live ? "translate-x-6" : "translate-x-0.5"}`} />
+                                            </button>
+                                        </div>
+
+                                        {value.live && (
+                                            <div className="grid grid-cols-4 gap-1 p-1 bg-slate-100/80 rounded-xl">
                                                 {INTERVALS.map((interval) => (
                                                     <button
                                                         key={interval.value}
                                                         onClick={() => onChange({ ...value, refreshInterval: interval.value })}
-                                                        className={`text-[10px] font-bold h-6 rounded-md transition-all ${value.refreshInterval === interval.value
-                                                            ? "bg-white text-slate-900 shadow-sm"
-                                                            : "text-slate-500 hover:text-slate-700"
+                                                        className={`text-[11px] font-black h-8 rounded-lg transition-all ${value.refreshInterval === interval.value
+                                                            ? "bg-white text-slate-955 shadow-sm"
+                                                            : "text-slate-500 hover:text-slate-800"
                                                             }`}
                                                     >
                                                         {interval.label}
                                                     </button>
                                                 ))}
                                             </div>
-                                        </div>
-                                    )}
-                                </div>
-                            )}
-                        </div>
-                    )}
-
-                    {/* Custom Range Area */}
-                    {showAbsolute && (
-                        <div className="flex-1 p-6 flex flex-col gap-6">
-                            <button
-                                onClick={handleClearFilter}
-                                className={`w-full h-11 rounded-xl flex items-center justify-center gap-2.5 transition-all outline-none border ${value.type === "all"
-                                    ? "bg-slate-950 text-white border-slate-950 shadow-lg shadow-slate-900/10"
-                                    : "bg-indigo-50 border-indigo-200 text-indigo-600 hover:bg-indigo-100 hover:border-indigo-300 shadow-sm"
-                                    }`}
-                            >
-                                <svg className="w-4 h-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                                    <circle cx="12" cy="12" r="10" />
-                                    <line x1="15" y1="9" x2="9" y2="15" />
-                                    <line x1="9" y1="9" x2="15" y2="15" />
-                                </svg>
-                                <span className="text-[13px] font-bold uppercase tracking-wider">All Time (No Filter)</span>
-                            </button>
-
-                            <div className="h-px bg-slate-100 w-full" />
-
-                            <div className="space-y-4">
-                                <h3 className="text-[11px] font-black text-slate-400 uppercase tracking-[0.2em]">Absolute time range</h3>
-
-                                <div className="grid grid-cols-1 gap-4">
-                                    <div className="space-y-1.5">
-                                        <label className="text-[10px] font-bold text-slate-500 uppercase ml-1">From</label>
-                                        <div className="relative group">
-                                            <input
-                                                type="datetime-local"
-                                                value={tempStart}
-                                                onChange={(e) => setTempStart(e.target.value)}
-                                                className="w-full h-11 px-4 bg-white border border-slate-200 rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-slate-950/5 focus:border-slate-950 transition-all cursor-pointer"
-                                            />
-                                        </div>
+                                        )}
                                     </div>
-
-                                    <div className="space-y-1.5">
-                                        <label className="text-[10px] font-bold text-slate-500 uppercase ml-1">To</label>
-                                        <div className="relative group">
-                                            <input
-                                                type="datetime-local"
-                                                value={tempEnd}
-                                                onChange={(e) => setTempEnd(e.target.value)}
-                                                className="w-full h-11 px-4 bg-white border border-slate-200 rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-slate-950/5 focus:border-slate-950 transition-all cursor-pointer"
-                                            />
-                                        </div>
-                                    </div>
-                                </div>
+                                )}
                             </div>
-
-                            <button
-                                onClick={handleApplyAbsolute}
-                                disabled={!tempStart || !tempEnd}
-                                className={`w-full h-11 rounded-xl text-sm font-bold transition-all active:scale-[0.98] outline-none border ${value.type === "absolute"
-                                    ? "bg-slate-950 text-white border-slate-950 shadow-lg shadow-slate-900/10"
-                                    : "bg-slate-50 border-slate-200 text-slate-600 hover:border-slate-900 hover:text-slate-900 hover:bg-slate-100 shadow-sm"
-                                    } disabled:opacity-50 disabled:active:scale-100`}
-                            >
-                                {value.type === "absolute" ? "Absolute Range Active" : "Apply Custom Range"}
-                            </button>
-
-                            {tempStart && tempEnd && (
-                                <div className="text-center">
-                                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                                        Duration: {(() => {
-                                            const diffMs = new Date(tempEnd).getTime() - new Date(tempStart).getTime();
-                                            if (diffMs <= 0) return "Invalid range";
-                                            const diffMins = Math.floor(diffMs / 60000);
-                                            const days = Math.floor(diffMins / (24 * 60));
-                                            const hours = Math.floor((diffMins % (24 * 60)) / 60);
-                                            const mins = diffMins % 60;
-
-                                            const parts = [];
-                                            if (days > 0) parts.push(`${days}d`);
-                                            if (hours > 0) parts.push(`${hours}h`);
-                                            if (mins > 0 || parts.length === 0) parts.push(`${mins}m`);
-                                            return parts.join(" ");
-                                        })()}
-                                    </span>
-                                </div>
-                            )}
-
-                            {/* Mobile Live Toggle */}
-                            {showLive && (
-                                <div className="flex md:hidden flex-col pt-4 border-t border-slate-100 gap-3">
-                                    <div className="flex items-center justify-between">
-                                        <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">{liveLabel}</span>
-                                        <button
-                                            onClick={() => onChange({ ...value, live: !value.live, refreshInterval: value.refreshInterval || 15 })}
-                                            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${value.live ? "bg-emerald-500" : "bg-slate-200"}`}
-                                        >
-                                            <span className={`inline-block h-4.5 w-4.5 transform rounded-full bg-white transition-transform ${value.live ? "translate-x-6" : "translate-x-0.5"}`} />
-                                        </button>
-                                    </div>
-
-                                    {value.live && (
-                                        <div className="grid grid-cols-4 gap-1.5 p-1 bg-slate-100/80 rounded-xl">
-                                            {INTERVALS.map((interval) => (
-                                                <button
-                                                    key={interval.value}
-                                                    onClick={() => onChange({ ...value, refreshInterval: interval.value })}
-                                                    className={`text-[11px] font-black h-8 rounded-lg transition-all ${value.refreshInterval === interval.value
-                                                        ? "bg-white text-slate-950 shadow-sm"
-                                                        : "text-slate-500 hover:text-slate-800"
-                                                        }`}
-                                                >
-                                                    {interval.label}
-                                                </button>
-                                            ))}
-                                        </div>
-                                    )}
-                                </div>
-                            )}
-                        </div>
-                    )}
-                </div>
+                        )}
+                    </div>
+                </>,
+                document.body
             )}
         </div>
     );

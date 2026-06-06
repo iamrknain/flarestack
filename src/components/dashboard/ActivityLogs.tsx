@@ -111,7 +111,7 @@ export function ActivityLogs({
 
     return (
         <div className="flex flex-col gap-4 sm:gap-6">
-            <header className="sticky top-0 z-20 bg-white/95 backdrop-blur-md border-b border-slate-200/60 px-3 sm:px-4 py-3 flex flex-row flex-wrap gap-2 items-center w-full">
+            <header className="sticky top-0 z-20 bg-white sm:bg-white/95 sm:backdrop-blur-md border-b border-slate-200/60 px-2 sm:px-4 py-2 flex flex-row gap-1.5 items-center w-full overflow-x-auto scrollbar-hide">
 
                 {/* Zone select (All Zones is valid here) */}
                 <select
@@ -139,7 +139,7 @@ export function ActivityLogs({
                 <div className="w-px h-6 bg-slate-200 shrink-0 hidden sm:block" />
 
                 {/* Search & Deep Search Group */}
-                <div className="flex items-center gap-1.5 shrink-0 w-full sm:w-auto">
+                <div className="flex items-center gap-1.5 shrink-0 w-[180px] sm:w-auto">
                     <div className="relative w-full sm:w-[220px] rounded-md border border-slate-200 ">
                         <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none">
                             <svg className="w-3.5 h-3.5 text-slate-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -163,7 +163,7 @@ export function ActivityLogs({
                         <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
                             <path d="m21 21-6-6m2-5a7 7 0 1 1-14 0 7 7 0 0 1 14 0z" />
                         </svg>
-                        Deep Search
+                        Search
                     </button>
                     {deepSearchActive && (
                         <button
