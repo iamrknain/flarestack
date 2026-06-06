@@ -138,7 +138,7 @@ export async function runVercelBotProtectionRule({ project, rule, logger }: Ctx)
                     await sendEmail({
                         to: notifyEmails.split(",").map((e: string) => e.trim()),
                         subject: `[Alert] Vercel Bot Protection ACTIVATED for ${project.domain || project.name}`,
-                        html: vercelBotProtectionOnEmail(project.name, project.domain, totalRequests, rateLimitThreshold, action, windowSecs),
+                        html: vercelBotProtectionOnEmail(project.name, project.domain, project.vercelProjectId, rule.trafficSource || "log_drain", totalRequests, rateLimitThreshold, action, windowSecs),
                     });
                 }
             } catch (err) {
@@ -170,7 +170,7 @@ export async function runVercelBotProtectionRule({ project, rule, logger }: Ctx)
                     await sendEmail({
                         to: notifyEmails.split(",").map((e: string) => e.trim()),
                         subject: `[Resolve] Vercel Bot Protection DEACTIVATED for ${project.domain || project.name}`,
-                        html: vercelBotProtectionOffEmail(project.name, project.domain, totalRequests, offThreshold, windowSecs),
+                        html: vercelBotProtectionOffEmail(project.name, project.domain, project.vercelProjectId, rule.trafficSource || "log_drain", totalRequests, offThreshold, windowSecs),
                     });
                 }
             } catch (err) {

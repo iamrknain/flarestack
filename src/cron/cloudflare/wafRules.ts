@@ -88,7 +88,7 @@ export async function runWafAutomationRule({ zone, rule, cf, logger }: WafContex
                 await sendEmail({
                     to: notifyEmails.split(",").map((e) => e.trim()),
                     subject: `[Alert] WAF Automation Rule Auto-Disabled: ${name}`,
-                    html: wafRuleNotFoundEmail(zone.name, name, cfRuleName),
+                    html: wafRuleNotFoundEmail(zone.name, zone.domain, zone.cfZoneId, name, cfRuleName),
                 });
             }
         } catch (dbErr) {
@@ -151,7 +151,7 @@ export async function runWafAutomationRule({ zone, rule, cf, logger }: WafContex
                     await sendEmail({
                         to: notifyEmails.split(",").map((e) => e.trim()),
                         subject: `[Alert] WAF Custom Rule ACTIVATED for ${zone.name}`,
-                        html: wafRuleOnEmail(zone.name, name, cfRuleName, totalRequests, rateLimitThreshold, windowSeconds),
+                        html: wafRuleOnEmail(zone.name, zone.domain, zone.cfZoneId, name, cfRuleName, totalRequests, rateLimitThreshold, windowSeconds),
                     });
                 }
             } catch (err: any) {
@@ -196,7 +196,7 @@ export async function runWafAutomationRule({ zone, rule, cf, logger }: WafContex
                     await sendEmail({
                         to: notifyEmails.split(",").map((e) => e.trim()),
                         subject: `[Resolve] WAF Custom Rule DEACTIVATED for ${zone.name}`,
-                        html: wafRuleOffEmail(zone.name, name, cfRuleName, totalRequests, offThreshold, windowSeconds),
+                        html: wafRuleOffEmail(zone.name, zone.domain, zone.cfZoneId, name, cfRuleName, totalRequests, offThreshold, windowSeconds),
                     });
                 }
             } catch (err: any) {

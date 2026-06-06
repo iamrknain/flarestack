@@ -40,13 +40,23 @@ function emailShell(headerBg: string, title: string, subtitle: string, tableRows
 
 // ── Under Attack Mode templates ────────────────────────────────────────────
 
-export function vercelAttackOnEmail(name: string, domain: string | null | undefined, total: number, threshold: number, window: number) {
+export function vercelAttackOnEmail(
+    name: string,
+    domain: string | null | undefined,
+    vercelProjectId: string,
+    trafficSource: string,
+    total: number,
+    threshold: number,
+    window: number
+) {
     return emailShell(
         "linear-gradient(135deg,#e11d48,#be123c)",
         "Security Alert: Vercel Attack Mode Activated",
         "Project traffic has exceeded security thresholds.",
-        row("Project", name) +
+        row("Project Name", name) +
         row("Domain", domain || "N/A") +
+        row("Vercel Project ID", vercelProjectId) +
+        row("Traffic Source", trafficSource === "cloudflare" ? "Cloudflare Analytics" : "Direct Log Drain") +
         row("Traffic Window", `${window}s`) +
         row("Current Traffic", `${total.toLocaleString()} reqs`) +
         row("Trigger Limit", `${threshold.toLocaleString()} reqs`),
@@ -54,13 +64,23 @@ export function vercelAttackOnEmail(name: string, domain: string | null | undefi
     );
 }
 
-export function vercelAttackOffEmail(name: string, domain: string | null | undefined, total: number, threshold: number, window: number) {
+export function vercelAttackOffEmail(
+    name: string,
+    domain: string | null | undefined,
+    vercelProjectId: string,
+    trafficSource: string,
+    total: number,
+    threshold: number,
+    window: number
+) {
     return emailShell(
         "linear-gradient(135deg,#10b981,#047857)",
         "Security Resolved: Vercel Attack Mode Deactivated",
         "Project traffic has returned to normal.",
-        row("Project", name) +
+        row("Project Name", name) +
         row("Domain", domain || "N/A") +
+        row("Vercel Project ID", vercelProjectId) +
+        row("Traffic Source", trafficSource === "cloudflare" ? "Cloudflare Analytics" : "Direct Log Drain") +
         row("Traffic Window", `${window}s`) +
         row("Current Traffic", `${total.toLocaleString()} reqs`) +
         row("Recovery Limit", `${threshold.toLocaleString()} reqs`),
@@ -70,13 +90,24 @@ export function vercelAttackOffEmail(name: string, domain: string | null | undef
 
 // ── Bot Protection templates ───────────────────────────────────────────────
 
-export function vercelBotProtectionOnEmail(name: string, domain: string | null | undefined, total: number, threshold: number, action: string, window: number) {
+export function vercelBotProtectionOnEmail(
+    name: string,
+    domain: string | null | undefined,
+    vercelProjectId: string,
+    trafficSource: string,
+    total: number,
+    threshold: number,
+    action: string,
+    window: number
+) {
     return emailShell(
         "linear-gradient(135deg,#f59e0b,#d97706)",
         "Security Alert: Vercel Bot Protection Enabled",
         "Project traffic has exceeded security thresholds.",
-        row("Project", name) +
+        row("Project Name", name) +
         row("Domain", domain || "N/A") +
+        row("Vercel Project ID", vercelProjectId) +
+        row("Traffic Source", trafficSource === "cloudflare" ? "Cloudflare Analytics" : "Direct Log Drain") +
         row("Traffic Window", `${window}s`) +
         row("Current Traffic", `${total.toLocaleString()} reqs`) +
         row("Trigger Limit", `${threshold.toLocaleString()} reqs`) +
@@ -85,13 +116,23 @@ export function vercelBotProtectionOnEmail(name: string, domain: string | null |
     );
 }
 
-export function vercelBotProtectionOffEmail(name: string, domain: string | null | undefined, total: number, threshold: number, window: number) {
+export function vercelBotProtectionOffEmail(
+    name: string,
+    domain: string | null | undefined,
+    vercelProjectId: string,
+    trafficSource: string,
+    total: number,
+    threshold: number,
+    window: number
+) {
     return emailShell(
         "linear-gradient(135deg,#10b981,#047857)",
         "Security Resolved: Bot Protection Deactivated",
         "Project traffic has returned to normal.",
-        row("Project", name) +
+        row("Project Name", name) +
         row("Domain", domain || "N/A") +
+        row("Vercel Project ID", vercelProjectId) +
+        row("Traffic Source", trafficSource === "cloudflare" ? "Cloudflare Analytics" : "Direct Log Drain") +
         row("Traffic Window", `${window}s`) +
         row("Current Traffic", `${total.toLocaleString()} reqs`) +
         row("Recovery Limit", `${threshold.toLocaleString()} reqs`),

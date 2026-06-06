@@ -131,7 +131,7 @@ export async function runVercelUnderAttackRule({ project, rule, logger }: Ctx): 
                     await sendEmail({
                         to: notifyEmails.split(",").map((e: string) => e.trim()),
                         subject: `[Alert] Vercel Attack Mode ACTIVATED for ${project.domain || project.name}`,
-                        html: vercelAttackOnEmail(project.name, project.domain, totalRequests, rateLimitThreshold, windowSecs),
+                        html: vercelAttackOnEmail(project.name, project.domain, project.vercelProjectId, rule.trafficSource || "log_drain", totalRequests, rateLimitThreshold, windowSecs),
                     });
                 }
             } catch (err) {
@@ -164,7 +164,7 @@ export async function runVercelUnderAttackRule({ project, rule, logger }: Ctx): 
                     await sendEmail({
                         to: notifyEmails.split(",").map((e: string) => e.trim()),
                         subject: `[Resolve] Vercel Attack Mode DEACTIVATED for ${project.domain || project.name}`,
-                        html: vercelAttackOffEmail(project.name, project.domain, totalRequests, offThreshold, windowSecs),
+                        html: vercelAttackOffEmail(project.name, project.domain, project.vercelProjectId, rule.trafficSource || "log_drain", totalRequests, offThreshold, windowSecs),
                     });
                 }
             } catch (err) {

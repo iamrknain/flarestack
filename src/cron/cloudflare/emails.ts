@@ -40,12 +40,21 @@ function emailShell(headerBg: string, title: string, subtitle: string, tableRows
 
 // ── Under Attack Mode templates ────────────────────────────────────────────
 
-export function underAttackOnEmail(zone: string, total: number, threshold: number, window: number) {
+export function underAttackOnEmail(
+    zoneName: string,
+    domain: string | null | undefined,
+    cfZoneId: string,
+    total: number,
+    threshold: number,
+    window: number
+) {
     return emailShell(
         "linear-gradient(135deg,#e11d48,#be123c)",
         "Security Alert: Under Attack Mode Activated",
         "Zone traffic has exceeded security thresholds.",
-        row("Zone", zone) +
+        row("Zone Name", zoneName) +
+        row("Domain", domain || "N/A") +
+        row("Cloudflare Zone ID", cfZoneId) +
         row("Traffic Window", `${window}s`) +
         row("Current Traffic", `${total.toLocaleString()} reqs`) +
         row("Trigger Limit", `${threshold.toLocaleString()} reqs`),
@@ -53,12 +62,22 @@ export function underAttackOnEmail(zone: string, total: number, threshold: numbe
     );
 }
 
-export function underAttackOffEmail(zone: string, total: number, threshold: number, level: string, window: number) {
+export function underAttackOffEmail(
+    zoneName: string,
+    domain: string | null | undefined,
+    cfZoneId: string,
+    total: number,
+    threshold: number,
+    level: string,
+    window: number
+) {
     return emailShell(
         "linear-gradient(135deg,#10b981,#047857)",
         "Security Resolved: Traffic Normalized",
         "Zone traffic has subsided below recovery thresholds.",
-        row("Zone", zone) +
+        row("Zone Name", zoneName) +
+        row("Domain", domain || "N/A") +
+        row("Cloudflare Zone ID", cfZoneId) +
         row("Traffic Window", `${window}s`) +
         row("Current Traffic", `${total.toLocaleString()} reqs`) +
         row("Recovery Limit", `${threshold.toLocaleString()} reqs`) +
@@ -69,12 +88,23 @@ export function underAttackOffEmail(zone: string, total: number, threshold: numb
 
 // ── WAF Automation Rule templates ──────────────────────────────────────────
 
-export function wafRuleOnEmail(zone: string, ruleName: string, wafRuleName: string, total: number, threshold: number, window: number) {
+export function wafRuleOnEmail(
+    zoneName: string,
+    domain: string | null | undefined,
+    cfZoneId: string,
+    ruleName: string,
+    wafRuleName: string,
+    total: number,
+    threshold: number,
+    window: number
+) {
     return emailShell(
         "linear-gradient(135deg,#6366f1,#4338ca)",
         "Security Alert: WAF Custom Rule Enabled",
         "Zone traffic has exceeded automation thresholds.",
-        row("Zone", zone) +
+        row("Zone Name", zoneName) +
+        row("Domain", domain || "N/A") +
+        row("Cloudflare Zone ID", cfZoneId) +
         row("Automation Rule", ruleName) +
         row("Target WAF Rule", wafRuleName) +
         row("Traffic Window", `${window}s`) +
@@ -84,12 +114,23 @@ export function wafRuleOnEmail(zone: string, ruleName: string, wafRuleName: stri
     );
 }
 
-export function wafRuleOffEmail(zone: string, ruleName: string, wafRuleName: string, total: number, threshold: number, window: number) {
+export function wafRuleOffEmail(
+    zoneName: string,
+    domain: string | null | undefined,
+    cfZoneId: string,
+    ruleName: string,
+    wafRuleName: string,
+    total: number,
+    threshold: number,
+    window: number
+) {
     return emailShell(
         "linear-gradient(135deg,#10b981,#047857)",
         "Security Resolved: WAF Custom Rule Disabled",
         "Zone traffic has subsided below recovery thresholds.",
-        row("Zone", zone) +
+        row("Zone Name", zoneName) +
+        row("Domain", domain || "N/A") +
+        row("Cloudflare Zone ID", cfZoneId) +
         row("Automation Rule", ruleName) +
         row("Target WAF Rule", wafRuleName) +
         row("Traffic Window", `${window}s`) +
@@ -99,12 +140,20 @@ export function wafRuleOffEmail(zone: string, ruleName: string, wafRuleName: str
     );
 }
 
-export function wafRuleNotFoundEmail(zone: string, ruleName: string, wafRuleName: string) {
+export function wafRuleNotFoundEmail(
+    zoneName: string,
+    domain: string | null | undefined,
+    cfZoneId: string,
+    ruleName: string,
+    wafRuleName: string
+) {
     return emailShell(
         "linear-gradient(135deg,#f59e0b,#d97706)",
         "Security Alert: WAF Rule Auto-Disabled",
         "Target Custom WAF Rule was not found on Cloudflare.",
-        row("Zone", zone) +
+        row("Zone Name", zoneName) +
+        row("Domain", domain || "N/A") +
+        row("Cloudflare Zone ID", cfZoneId) +
         row("Automation Rule", ruleName) +
         row("Target WAF Rule", wafRuleName),
         `The automated WAF rule has been auto-disabled in FlareStack because target rule <strong>${wafRuleName}</strong> was deleted or could not be found on Cloudflare.`,

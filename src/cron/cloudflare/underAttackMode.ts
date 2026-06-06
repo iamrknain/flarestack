@@ -93,7 +93,7 @@ export async function runUnderAttackModeRule({ zone, rule, cf, logger }: UnderAt
                     await sendEmail({
                         to: notifyEmails.split(",").map((e) => e.trim()),
                         subject: `[Alert] Under Attack Mode ACTIVATED for ${zone.name}`,
-                        html: underAttackOnEmail(zone.name, totalRequests, rateLimitThreshold, windowSeconds),
+                        html: underAttackOnEmail(zone.name, zone.domain, zone.cfZoneId, totalRequests, rateLimitThreshold, windowSeconds),
                     });
                 }
             } catch (err) {
@@ -127,7 +127,7 @@ export async function runUnderAttackModeRule({ zone, rule, cf, logger }: UnderAt
                     await sendEmail({
                         to: notifyEmails.split(",").map((e) => e.trim()),
                         subject: `[Resolve] Under Attack Mode DEACTIVATED for ${zone.name}`,
-                        html: underAttackOffEmail(zone.name, totalRequests, offThreshold, targetLevel, windowSeconds),
+                        html: underAttackOffEmail(zone.name, zone.domain, zone.cfZoneId, totalRequests, offThreshold, targetLevel, windowSeconds),
                     });
                 }
             } catch (err) {
