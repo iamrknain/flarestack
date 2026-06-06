@@ -1,8 +1,8 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { DateRangePicker, type DateRange } from "~/components/DateRangePicker";
-import { getListsAction, getListItemsAction, deleteListItemsAction, addListItemsAction } from "~/server/cloudflare";
+import { getListsAction, getListItemsAction, deleteListItemsAction, addListItemsAction, syncListItemsCacheAction, clearListItemsCacheAction, getListCacheStatusAction } from "~/server/cloudflare";
 import { IpLookupModal } from "~/components/dashboard/cloudflare/IpLookupModal";
-import { ListActionSelection, createCopyAction, createDeleteAction, createLookupAction } from "~/components/dashboard/cloudflare/ListActionSelection";
+import { ActionSelection, createCopyAction, createDeleteAction, createLookupAction } from "~/components/dashboard/cloudflare/ActionSelection";
 
 const isValueQuery = (query: string): boolean => {
     const trimmed = query.trim();
@@ -52,6 +52,7 @@ export function Lists({
     });
     const [listItems, setListItems] = useState<any[]>([]);
     const [searchQuery, setSearchQuery] = useState("");
+    const [fetchMode, setFetchMode] = useState<'cache' | 'native'>('cache');
     const [deepSearchActive, setDeepSearchActive] = useState(false);
     const [selectedItemIds, setSelectedItemIds] = useState<Set<string>>(new Set());
     const [isIpLookupOpen, setIsIpLookupOpen] = useState(false);
@@ -60,6 +61,12 @@ export function Lists({
     const [addValue, setAddValue] = useState("");
     const [addComment, setAddComment] = useState("");
     const [isAddingItem, setIsAddingItem] = useState(false);
+    const [isSyncingCache, setIsSyncingCache] = useState(false);
+    const [isClearingCache, setIsClearingCache] = useState(false);
+    const [cacheStatus, setCacheStatus] = useState<{ cached: boolean; count: number; syncedAt: Date | null } | null>(null);
+    const [isCachePopoverOpen, setIsCachePopoverOpen] = useState(false);
+    const [isFetchDropdownOpen, setIsFetchDropdownOpen] = useState(false);
+    const [searchError, setSearchError] = useState<string | null>(null);
 
     const handleAddItemSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -192,17 +199,26 @@ export function Lists({
         }
     };
 
-    const handleFetchItems = async (isDeep = deepSearchActive, query = searchQuery) => {
+    const handleFetchItems = async (isDeep = deepSearchActive, query = searchQuery, bypassCacheOverride?: boolean) => {
         if (!selectedListId || !selectedAccountRef) return;
         setItemsLoading(true);
+        setSearchError(null);
         try {
             const fetchLimit = isDeep ? undefined : limit;
-            const isIpPrefix = /^[a-fA-F0-9.:]+$/.test(query.trim());
-            const searchParam = (isDeep && isIpPrefix) ? query.trim() : undefined;
+            // Pass query to server for ALL deep searches:
+            //   - IP/value queries → CF prefix match (fast)
+            //   - Description queries → db ILIKE if cache exists, error if cold
+            const searchParam = isDeep && query.trim() ? query.trim() : undefined;
+            const useBypass = bypassCacheOverride !== undefined ? bypassCacheOverride : (fetchMode === 'native');
 
-            const data = await getListItemsAction(selectedAccountRef, selectedListId, fetchLimit, searchParam);
+            const data = await getListItemsAction(selectedAccountRef, selectedListId, fetchLimit, searchParam, useBypass);
             if (data && "error" in data) {
-                console.error("Fetch items error:", data.error);
+                // CACHE_REQUIRED means db is cold and query is a description search
+                if ((data.error as string).startsWith('Build the cache')) {
+                    setSearchError(data.error as string);
+                } else {
+                    console.error("Fetch items error:", data.error);
+                }
             } else {
                 setListItems(data);
             }
@@ -274,6 +290,14 @@ export function Lists({
         return () => clearInterval(timer);
     }, [selectedListId, selectedAccountRef, limit, dateRange.live]);
 
+    // Fetch cache status when selected list changes
+    useEffect(() => {
+        setCacheStatus(null);
+        if (selectedListId && selectedAccountRef) {
+            fetchCacheStatus(selectedListId);
+        }
+    }, [selectedListId, selectedAccountRef]);
+
     // Notify parent to pause global sync when items are selected
     useEffect(() => {
         onPauseChange?.(selectedItemIds.size > 0);
@@ -304,16 +328,20 @@ export function Lists({
     const filteredItems = useMemo(() => {
         let items = listItems;
 
+        const parseTime = (dateStr: string | null | undefined) => {
+            if (!dateStr) return 0;
+            const t = new Date(dateStr).getTime();
+            return isNaN(t) ? 0 : t;
+        };
+
         // Filter by Date Range
         if (startTime) {
-            items = items.filter(item => new Date(item.created_on).getTime() >= startTime);
+            items = items.filter(item => parseTime(item.created_on) >= startTime);
         }
 
-        // Sort by Date Added (latest first)
+        // Sort by Date Added (oldest first — matches Cloudflare's native order)
         items = [...items].sort((a, b) => {
-            const timeA = a.created_on ? new Date(a.created_on).getTime() : 0;
-            const timeB = b.created_on ? new Date(b.created_on).getTime() : 0;
-            return timeB - timeA;
+            return parseTime(a.created_on) - parseTime(b.created_on);
         });
 
         // Filter by Search Query
@@ -334,12 +362,13 @@ export function Lists({
 
         setDeleteLoading(true);
         try {
-            const ips = listItems
+            // Pass natural values (ip|asn|hostname) — server resolves CF UUIDs internally
+            const values = listItems
                 .filter(item => ids.includes(item.id))
-                .map(item => item.ip)
-                .filter((ip): ip is string => !!ip);
+                .map(item => item.ip ?? item.asn?.toString() ?? item.hostname ?? '')
+                .filter(Boolean);
 
-            const data = await deleteListItemsAction(selectedAccountRef, selectedListId!, ids, ips);
+            const data = await deleteListItemsAction(selectedAccountRef, selectedListId!, values);
             if (data && "error" in data) {
                 console.error("Delete items error:", data.error);
             } else if (data?.success) {
@@ -355,36 +384,30 @@ export function Lists({
 
     const handleBulkDeleteByIps = async (ips: string[]) => {
         const cleanInputIps = ips.map(ip => ip.split("/")[0].trim());
-        const idsToDelete = listItems
-            .filter(item => {
-                const itemIp = item.ip || item.asn?.toString() || item.hostname;
-                if (!itemIp) return false;
-                const cleanItemIp = itemIp.split("/")[0].trim();
-                return cleanInputIps.includes(cleanItemIp);
-            })
-            .map(item => item.id);
-        
-        if (idsToDelete.length === 0) {
+        const matchedItems = listItems.filter(item => {
+            const itemIp = item.ip || item.asn?.toString() || item.hostname;
+            if (!itemIp) return false;
+            return cleanInputIps.includes(itemIp.split("/")[0].trim());
+        });
+
+        if (matchedItems.length === 0) {
             alert(`No matching items found in local list to delete.\nInput IPs: ${JSON.stringify(cleanInputIps)}\nAvailable items: ${JSON.stringify(listItems.map(i => i.ip || i.asn || i.hostname))}`);
             return;
         }
 
-        try {
-            const mappedIps = listItems
-                .filter(item => idsToDelete.includes(item.id))
-                .map(item => item.ip)
-                .filter((ip): ip is string => !!ip);
+        const valuesToDelete = matchedItems.map(item => item.ip ?? item.asn?.toString() ?? item.hostname ?? '').filter(Boolean);
 
-            const data = await deleteListItemsAction(selectedAccountRef, selectedListId!, idsToDelete, mappedIps);
+        try {
+            const data = await deleteListItemsAction(selectedAccountRef, selectedListId!, valuesToDelete);
             if (data && "error" in data) {
                 alert(`Delete API Error: ${data.error}`);
                 throw new Error(data.error);
             } else if (data?.success) {
-                alert(`Successfully deleted ${idsToDelete.length} item(s) from Cloudflare!`);
+                alert(`Successfully deleted ${valuesToDelete.length} item(s) from Cloudflare!`);
                 await handleFetchItems();
                 setSelectedItemIds(prev => {
                     const next = new Set(prev);
-                    idsToDelete.forEach(id => next.delete(id));
+                    matchedItems.forEach((item: any) => next.delete(item.id));
                     return next;
                 });
             }
@@ -413,9 +436,63 @@ export function Lists({
     const isItemsLoading = itemsLoading;
     const isRefreshing = isListsLoading || isItemsLoading || isGlobalLoading;
 
-    const handleRefresh = () => {
+    const fetchCacheStatus = async (listId: string) => {
+        if (!selectedAccountRef || !listId) return;
+        try {
+            const status = await getListCacheStatusAction(selectedAccountRef, listId);
+            if (status && !('error' in status)) {
+                setCacheStatus({ cached: status.cached, count: status.count, syncedAt: status.syncedAt ? new Date(status.syncedAt) : null });
+            }
+        } catch { /* ignore */ }
+    };
+
+    const handleRefresh = async () => {
         handleFetchLists();
         handleFetchItems();
+        if (selectedListId) {
+            await fetchCacheStatus(selectedListId);
+        }
+    };
+
+    const handleSyncCache = async (): Promise<boolean> => {
+        if (!selectedListId || !selectedAccountRef) return false;
+        if (!confirm("Are you sure you want to build/re-sync the list cache? This will fetch all items from Cloudflare and rebuild the local database cache. For large lists, this may take up to 20 seconds.")) return false;
+        setIsSyncingCache(true);
+        try {
+            const result = await syncListItemsCacheAction(selectedAccountRef, selectedListId);
+            if (result && 'error' in result) {
+                alert(`Cache sync failed: ${result.error}`);
+                return false;
+            } else {
+                await fetchCacheStatus(selectedListId);
+                return true;
+            }
+        } catch (err: any) {
+            alert(`Cache sync error: ${err.message}`);
+            return false;
+        } finally {
+            setIsSyncingCache(false);
+        }
+    };
+
+    const handleClearCache = async () => {
+        if (!selectedListId || !selectedAccountRef) return;
+        if (!confirm("Are you sure you want to clear the local database cache? This will not affect Cloudflare, but description search will be disabled until rebuilt.")) return;
+        setIsClearingCache(true);
+        try {
+            const result = await clearListItemsCacheAction(selectedAccountRef, selectedListId);
+            if (result && 'error' in result) {
+                alert(`Cache clear failed: ${result.error}`);
+            } else {
+                await fetchCacheStatus(selectedListId);
+                // Also trigger a refresh of items (which will fallback to CF because cache is cleared)
+                await handleFetchItems(true);
+            }
+        } catch (err: any) {
+            alert(`Cache clear error: ${err.message}`);
+        } finally {
+            setIsClearingCache(false);
+        }
     };
 
     return (
@@ -513,14 +590,38 @@ export function Lists({
                             className="flex items-center justify-center text-rose-600 hover:text-rose-800 text-[10px] font-black uppercase px-2 h-[34px] transition-colors"
                             title="Clear deep search filter"
                         >
-                            Clear Deep Search
+                            Clear
                         </button>
                     )}
                 </div>
 
+                {/* Cache-required error banner */}
+                {searchError && (
+                    <div className="w-full flex items-center gap-2 px-3 py-2 rounded-md bg-amber-50 border border-amber-200 text-amber-800 text-[11px] font-medium">
+                        <svg className="w-3.5 h-3.5 shrink-0 text-amber-500" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                            <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+                        </svg>
+                        <span className="flex-1">{searchError}</span>
+                        <button
+                            onClick={async () => {
+                                setSearchError(null);
+                                setIsCachePopoverOpen(false);
+                                const success = await handleSyncCache();
+                                if (success) {
+                                    await handleFetchItems(true, searchQuery);
+                                }
+                            }}
+                            disabled={isSyncingCache}
+                            className="shrink-0 px-2 py-0.5 rounded bg-amber-200 hover:bg-amber-300 text-amber-900 font-bold text-[10px] uppercase tracking-wide disabled:opacity-50 transition-colors"
+                        >
+                            {isSyncingCache ? 'Building…' : 'Build Cache'}
+                        </button>
+                    </div>
+                )}
+
                 <div className="w-px h-6 bg-slate-200 shrink-0 hidden sm:block mx-1" />
 
-                <ListActionSelection
+                <ActionSelection
                     selectedCount={selectedItemIds.size}
                     onClear={() => setSelectedItemIds(new Set())}
                     placement="bottom"
@@ -536,37 +637,213 @@ export function Lists({
 
                 {/* Actions + Limit + Add */}
                 <div className="flex items-center gap-2 ml-auto shrink-0">
-                    <div className="flex items-center rounded-md overflow-hidden border border-slate-900 shadow-sm">
+
+                    {/* Cache button — opens status popover */}
+                    <div className="relative flex items-center shrink-0">
                         <button
-                            onClick={handleRefresh}
-                            disabled={isRefreshing}
-                            className="flex items-center justify-center gap-1.5 bg-slate-950 hover:bg-black disabled:opacity-30 disabled:cursor-not-allowed text-white text-[10px] font-bold px-3 h-[34px] transition-colors active:scale-95 whitespace-nowrap"
+                            onClick={() => setIsCachePopoverOpen(v => !v)}
+                            disabled={!selectedListId}
+                            className={`flex items-center gap-1.5 h-[34px] px-3 text-[10px] font-black tracking-wide transition-all rounded-md border shadow-sm disabled:cursor-not-allowed disabled:opacity-40 whitespace-nowrap active:scale-95 shrink-0 ${
+                                cacheStatus?.cached
+                                    ? 'bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-600'
+                                    : 'bg-slate-100 hover:bg-slate-200 text-slate-600 border-slate-300'
+                            }`}
                         >
-                            {isRefreshing ? (
+                            {isSyncingCache || isClearingCache ? (
                                 <svg className="animate-spin h-3 w-3" viewBox="0 0 24 24">
                                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
                                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                                 </svg>
                             ) : (
-                                <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                                    <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" /><path d="M3 3v5h5" /><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" /><path d="M16 16h5v5" />
+                                <svg xmlns="http://www.w3.org/2000/svg" width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                    <ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.66 4.03 3 9 3s9-1.34 9-3V5"/><path d="M3 12c0 1.66 4.03 3 9 3s9-1.34 9-3"/>
                                 </svg>
                             )}
-                            Sync
+                            <span>{cacheStatus?.cached ? cacheStatus.count.toLocaleString() : 'Cache'}</span>
+                            <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+                                className={`transition-transform duration-150 ml-0.5 ${isCachePopoverOpen ? 'rotate-180' : ''}`}>
+                                <polyline points="6 9 12 15 18 9"/>
+                            </svg>
                         </button>
-                        <div className="relative bg-slate-50 border-l border-slate-900/10 h-[34px] flex items-center">
-                            <input
-                                type="number"
-                                min={1}
-                                max={100}
-                                value={limit}
-                                onChange={(e) => onLimitChange(Number(e.target.value))}
-                                className="h-full pl-2.5 pr-8 text-[11px] font-bold bg-transparent border-0 shadow-none [appearance:textfield] focus:ring-0 text-slate-900 focus:outline-none"
-                            />
-                            <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[8px] font-black text-slate-400 uppercase pointer-events-none">
-                                MAX
-                            </span>
+
+                        {/* Cache Status Popover */}
+                        {isCachePopoverOpen && (
+                            <>
+                                {/* backdrop */}
+                                <div className="fixed inset-0 z-30" onClick={() => setIsCachePopoverOpen(false)} />
+                                <div className="absolute top-[calc(100%+6px)] right-0 z-40 w-64 bg-white rounded-lg border border-slate-200 shadow-xl overflow-hidden">
+                                    {/* header */}
+                                    <div className={`flex items-center gap-2 px-3 py-2.5 ${
+                                        cacheStatus?.cached ? 'bg-emerald-50 border-b border-emerald-100' : 'bg-slate-50 border-b border-slate-100'
+                                    }`}>
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+                                            className={cacheStatus?.cached ? 'text-emerald-600' : 'text-slate-400'}>
+                                            <ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.66 4.03 3 9 3s9-1.34 9-3V5"/><path d="M3 12c0 1.66 4.03 3 9 3s9-1.34 9-3"/>
+                                        </svg>
+                                        <span className="text-[11px] font-bold text-slate-700">List Cache</span>
+                                        <span className={`ml-auto text-[9px] font-black uppercase px-1.5 py-0.5 rounded-full ${
+                                            cacheStatus?.cached ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'
+                                        }`}>
+                                            {cacheStatus?.cached ? 'ACTIVE' : 'EMPTY'}
+                                        </span>
+                                    </div>
+                                    {/* body */}
+                                    <div className="px-3 py-3 flex flex-col gap-2.5">
+                                        <div className="flex items-center justify-between">
+                                            <span className="text-[10px] text-slate-500">Cached items</span>
+                                            <span className="text-[11px] font-bold text-slate-800">
+                                                {cacheStatus?.cached ? cacheStatus.count.toLocaleString() : '—'}
+                                            </span>
+                                        </div>
+                                        <div className="flex items-center justify-between">
+                                            <span className="text-[10px] text-slate-500">Last synced</span>
+                                            <span className="text-[11px] font-bold text-slate-800">
+                                                {cacheStatus?.syncedAt
+                                                    ? cacheStatus.syncedAt.toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })
+                                                    : '—'}
+                                            </span>
+                                        </div>
+                                        <div className="flex items-start gap-1.5 bg-amber-50 border border-amber-100 rounded-md px-2.5 py-2 mt-0.5">
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-amber-500 shrink-0 mt-px">
+                                                <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+                                            </svg>
+                                            <p className="text-[9px] text-amber-700 leading-relaxed">
+                                                {cacheStatus?.cached
+                                                    ? 'Cache enables instant description search. Re-sync after bulk changes.'
+                                                    : 'No cache yet. Click the Cache button to build it. Required for fast description search.'}
+                                            </p>
+                                        </div>
+                                    </div>
+                                    {/* footer action */}
+                                    <div className="px-3 pb-3 flex flex-col gap-1.5">
+                                        <button
+                                            onClick={() => { setIsCachePopoverOpen(false); handleSyncCache(); }}
+                                            disabled={isSyncingCache || isClearingCache || !selectedListId}
+                                            className="w-full flex items-center justify-center gap-1.5 bg-slate-900 hover:bg-black text-white text-[10px] font-bold h-8 rounded-md transition-colors disabled:opacity-40"
+                                        >
+                                            {isSyncingCache ? (
+                                                <svg className="animate-spin h-3 w-3" viewBox="0 0 24 24">
+                                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                                                </svg>
+                                            ) : (
+                                                <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                                                    <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/>
+                                                </svg>
+                                            )}
+                                            {cacheStatus?.cached ? 'Re-sync Cache' : 'Build Cache'}
+                                        </button>
+                                        {cacheStatus?.cached && (
+                                            <button
+                                                onClick={() => { setIsCachePopoverOpen(false); handleClearCache(); }}
+                                                disabled={isSyncingCache || isClearingCache || !selectedListId}
+                                                className="w-full flex items-center justify-center gap-1.5 border border-red-200 text-red-600 hover:bg-red-50 text-[10px] font-bold h-8 rounded-md transition-colors disabled:opacity-40"
+                                            >
+                                                {isClearingCache ? (
+                                                    <svg className="animate-spin h-3 w-3 text-red-600" viewBox="0 0 24 24">
+                                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                                                    </svg>
+                                                ) : (
+                                                    <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                                        <path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>
+                                                    </svg>
+                                                )}
+                                                Clear Cache
+                                            </button>
+                                        )}
+                                    </div>
+                                </div>
+                            </>
+                        )}
+                    </div>
+
+                    {/* Fetch + limit segment with mode dropdown */}
+                    <div className="relative flex items-center shrink-0">
+                        <div className="flex items-center rounded-md overflow-hidden border border-slate-900 shadow-sm shrink-0">
+                            <button
+                                onClick={handleRefresh}
+                                disabled={isRefreshing}
+                                className="flex items-center justify-center gap-1.5 bg-slate-950 hover:bg-black disabled:opacity-30 disabled:cursor-not-allowed text-white text-[10px] font-bold px-3 h-[34px] transition-colors active:scale-95 whitespace-nowrap shrink-0"
+                            >
+                                {isRefreshing ? (
+                                    <svg className="animate-spin h-3 w-3" viewBox="0 0 24 24">
+                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                                    </svg>
+                                ) : (
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                                        <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" /><path d="M3 3v5h5" /><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" /><path d="M16 16h5v5" />
+                                    </svg>
+                                )}
+                                {fetchMode === 'cache' ? 'Fetch Cache' : 'Fetch Native'}
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setIsFetchDropdownOpen(v => !v)}
+                                className="flex items-center justify-center h-[34px] px-2 bg-slate-900 hover:bg-black text-white/80 border-l border-slate-800 transition-colors shrink-0"
+                            >
+                                <svg xmlns="http://www.w3.org/2000/svg" width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={`transition-transform duration-150 ${isFetchDropdownOpen ? 'rotate-180' : ''}`}>
+                                    <polyline points="6 9 12 15 18 9"/>
+                                </svg>
+                            </button>
+                            <div className="relative bg-slate-50 border-l border-slate-900/10 h-[34px] flex items-center shrink-0">
+                                <input
+                                    type="number"
+                                    min={1}
+                                    max={100}
+                                    value={limit}
+                                    onChange={(e) => onLimitChange(Number(e.target.value))}
+                                    className="h-full pl-2.5 pr-8 text-[11px] font-bold bg-transparent border-0 shadow-none [appearance:textfield] focus:ring-0 text-slate-900 focus:outline-none w-[78px] shrink-0"
+                                />
+                                <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[8px] font-black text-slate-400 uppercase pointer-events-none">
+                                    MAX
+                                </span>
+                            </div>
                         </div>
+
+                        {/* Fetch Mode Dropdown Menu */}
+                        {isFetchDropdownOpen && (
+                            <>
+                                <div className="fixed inset-0 z-30" onClick={() => setIsFetchDropdownOpen(false)} />
+                                <div className="absolute top-[calc(100%+4px)] left-0 z-40 w-44 bg-white rounded-md border border-slate-200 shadow-lg py-1 overflow-hidden">
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setFetchMode('cache');
+                                            setIsFetchDropdownOpen(false);
+                                            // Trigger fetch in cache mode immediately:
+                                            setTimeout(() => handleFetchItems(deepSearchActive, searchQuery, false), 0);
+                                        }}
+                                        className={`w-full text-left px-3 py-2 text-[10px] font-bold transition-colors ${
+                                            fetchMode === 'cache'
+                                                ? 'bg-slate-100 text-slate-900'
+                                                : 'text-slate-600 hover:bg-slate-50'
+                                        }`}
+                                    >
+                                        Fetch Cache
+                                        <p className="text-[8px] text-slate-400 font-normal mt-0.5">Reads from local database cache</p>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setFetchMode('native');
+                                            setIsFetchDropdownOpen(false);
+                                            // Trigger fetch in native mode immediately:
+                                            setTimeout(() => handleFetchItems(deepSearchActive, searchQuery, true), 0);
+                                        }}
+                                        className={`w-full text-left px-3 py-2 text-[10px] font-bold transition-colors ${
+                                            fetchMode === 'native'
+                                                ? 'bg-slate-100 text-slate-900'
+                                                : 'text-slate-600 hover:bg-slate-50'
+                                        }`}
+                                    >
+                                        Fetch Native (CF Only)
+                                        <p className="text-[8px] text-slate-400 font-normal mt-0.5">Bypasses database, hits Cloudflare directly</p>
+                                    </button>
+                                </div>
+                            </>
+                        )}
                     </div>
 
                     <button
@@ -581,6 +858,7 @@ export function Lists({
                         Add Item
                     </button>
                 </div>
+
             </header>
 
             <main className="px-3 sm:px-4">

@@ -5,7 +5,6 @@ import { zoneConfigs, cloudflareAccounts, addIpToListRules, underAttackRules, wa
 import { eq, and, inArray } from "drizzle-orm";
 import { CloudflareClient } from "~/lib/cloudflare";
 import { ActionLogger } from "~/lib/logger";
-import { CacheStore } from "~/db/cache";
 import { runAddIpToListRule } from "./addIpToList";
 import { runUnderAttackModeRule } from "./underAttackMode";
 import { runWafAutomationRule } from "./wafRules";
@@ -13,7 +12,6 @@ import { runWafAutomationRule } from "./wafRules";
 export async function runCloudflareCron(userId: string): Promise<void> {
     const db = getDb();
     const logger = new ActionLogger(db);
-    const cache = new CacheStore(db);
 
     // 1. Load all active zones for this user
     const zones = await db
@@ -69,7 +67,7 @@ export async function runCloudflareCron(userId: string): Promise<void> {
                     const ruleCf = rule.cfApiTokenOverride && rule.cfApiTokenOverride.trim().length > 0
                         ? new CloudflareClient(account.cfAccountId, rule.cfApiTokenOverride.trim())
                         : cf;
-                    await runAddIpToListRule({ zone, rule, cf: ruleCf, logger, cache });
+                    await runAddIpToListRule({ zone, rule, cf: ruleCf, logger, db });
                 } catch (err) {
                     console.error(`[cron/cloudflare] Rule ${rule.id} failed:`, err);
                 }

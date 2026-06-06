@@ -2,8 +2,8 @@
 
 import { debugLog } from "~/lib/debug";
 import { ActionLogger } from "~/lib/logger";
-import { CacheStore } from "~/db/cache";
-import { CloudflareClient, type TopStatRow, type ListItem } from "~/lib/cloudflare";
+import { ListCache } from "~/db/list-cache";
+import { CloudflareClient, type TopStatRow } from "~/lib/cloudflare";
 import { addIpToListRules, zoneConfigs } from "~/db/schema/cloudflare";
 
 type AddIpToListRule = typeof addIpToListRules.$inferSelect;
@@ -14,7 +14,7 @@ interface AddIpToListContext {
     rule: AddIpToListRule;
     cf: CloudflareClient;
     logger: ActionLogger;
-    cache: CacheStore;
+    db: any;
     prefetchedIps?: { ip: string; count: number }[];
 }
 
@@ -23,10 +23,11 @@ export async function runAddIpToListRule({
     rule,
     cf,
     logger,
-    cache,
+    db,
     prefetchedIps,
 }: AddIpToListContext): Promise<void> {
     const { cfListId, rateLimitThreshold, windowSeconds } = rule;
+    const listCache = new ListCache(db, cf, cfListId);
 
     debugLog(`  [add_ip_to_list] id=${rule.id} list=${cfListId} threshold=${rateLimitThreshold} window=${windowSeconds}s`);
 
@@ -77,34 +78,26 @@ export async function runAddIpToListRule({
         return;
     }
 
-    // ── 2. Deduplicate against entity cache ───────────────────────────────
-    const namespace = `cf_list:${cfListId}`;
-    let cached = await cache.getAll(namespace);
-
-    if (cached.size === 0) {
-        debugLog(`  Cache miss for ${namespace}. Fetching live list from CF…`);
-        try {
-            const liveItems = await cf.lists.getItems(cfListId);
-            const liveIps = liveItems.map((i: ListItem) => i.ip).filter((ip: string | undefined): ip is string => !!ip);
-            await cache.sync(namespace, liveIps);
-            cached = new Set(liveIps);
-        } catch (err) {
-            const msg = err instanceof Error ? err.message : String(err);
-            console.error(`  Failed to fetch live list ${cfListId}:`, msg);
-            await logger.logActions([{
-                userId: zone.userId,
-                provider: "cloudflare",
-                resourceId: zone.id,
-                ruleId: rule.id,
-                actionTaken: "IP_ADDED_TO_LIST_ERROR",
-                targetType: "API_ERROR",
-                targetValue: msg.substring(0, 100),
-                requestCount: null,
-                metadata: JSON.stringify({ error: msg }),
-                timestamp: new Date(),
-            }]);
-            return;
-        }
+    // ── 2. Deduplicate against db cache (falls back to CF if cold) ───────
+    let cached: Set<string>;
+    try {
+        cached = await listCache.getIpSet();
+    } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error(`  Failed to get IP set for list ${cfListId}:`, msg);
+        await logger.logActions([{
+            userId: zone.userId,
+            provider: "cloudflare",
+            resourceId: zone.id,
+            ruleId: rule.id,
+            actionTaken: "IP_ADDED_TO_LIST_ERROR",
+            targetType: "API_ERROR",
+            targetValue: msg.substring(0, 100),
+            requestCount: null,
+            metadata: JSON.stringify({ error: msg }),
+            timestamp: new Date(),
+        }]);
+        return;
     }
 
     const newItems = flaggedIPs.filter(({ ip }) => !cached.has(ip));
@@ -139,14 +132,13 @@ export async function runAddIpToListRule({
         }]);
         // Re-sync cache after failure
         try {
-            const liveItems = await cf.lists.getItems(cfListId);
-            await cache.sync(namespace, liveItems.map((i: ListItem) => i.ip).filter((ip: string | undefined): ip is string => !!ip));
+            await listCache.fullSync();
         } catch { /* ignore sync errors */ }
         return;
     }
 
     // ── 4. Update cache + audit log ───────────────────────────────────────
-    await cache.add(namespace, newItems.map((i) => i.ip));
+    await listCache.syncAfterAdd(newItems.map(({ ip }) => ({ ip, comment })));
     await logger.logActions(newItems.map(({ ip, count }) => ({
         userId: zone.userId,
         provider: "cloudflare",

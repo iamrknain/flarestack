@@ -6,6 +6,7 @@ export interface TopStatsParams {
   windowSeconds?: number;
   limit: number;
   latencyOffsetSeconds?: number;
+  searchQuery?: string;
 }
 
 /** A single row returned by the Cloudflare Analytics top-stats query.
@@ -97,8 +98,30 @@ export class AnalyticsApi extends CloudflareApiBase {
         datetimeEnd = new Date(end).toISOString().split('.')[0] + 'Z';
       }
 
-      const filterStr = p.windowSeconds
-        ? `filter: { datetime_geq: ${startVar}, datetime_leq: ${endVar} }`
+      const filterParts: string[] = [];
+      if (p.windowSeconds) {
+        filterParts.push(`datetime_geq: ${startVar}, datetime_leq: ${endVar}`);
+      }
+
+      if (p.searchQuery) {
+        const query = p.searchQuery.trim();
+        const isIp = query.includes('.') || query.includes(':');
+        const isPath = query.startsWith('/');
+        if (isIp) {
+          filterParts.push(`clientIP: $searchQuery${i}`);
+        } else if (isPath) {
+          filterParts.push(`clientRequestPath: $searchQuery${i}`);
+        } else if (query.length === 2 && /^[A-Z]{2}$/.test(query)) {
+          filterParts.push(`clientCountryName: $searchQuery${i}`);
+        } else {
+          filterParts.push(`clientRequestPath: $searchQuery${i}`);
+        }
+        variableDefs.push(`$searchQuery${i}: String`);
+        variables[`searchQuery${i}`] = query;
+      }
+
+      const filterStr = filterParts.length > 0
+        ? `filter: { ${filterParts.join(', ')} }`
         : '';
       const dimensionsBlock = p.dimensions.length > 0
         ? `dimensions { ${p.dimensions.join(', ')} }`
@@ -171,12 +194,41 @@ export class AnalyticsApi extends CloudflareApiBase {
     const dimensionsBlock = params.dimensions.length > 0
       ? `dimensions { ${params.dimensions.join(', ')} }`
       : '';
-    const filterStr = params.windowSeconds
-      ? 'filter: { datetime_geq: $start, datetime_leq: $end }'
+
+    const filterParts: string[] = [];
+    if (params.windowSeconds) {
+      filterParts.push('datetime_geq: $start, datetime_leq: $end');
+    }
+
+    const queryVars: Record<string, any> = {
+      zoneTag: params.zoneTag,
+      start: datetimeStart || undefined,
+      end: datetimeEnd || undefined,
+      limit: params.limit,
+    };
+
+    if (params.searchQuery) {
+      const queryVal = params.searchQuery.trim();
+      const isIp = queryVal.includes('.') || queryVal.includes(':');
+      const isPath = queryVal.startsWith('/');
+      if (isIp) {
+        filterParts.push('clientIP: $searchQuery');
+      } else if (isPath) {
+        filterParts.push('clientRequestPath: $searchQuery');
+      } else if (queryVal.length === 2 && /^[A-Z]{2}$/.test(queryVal)) {
+        filterParts.push('clientCountryName: $searchQuery');
+      } else {
+        filterParts.push('clientRequestPath: $searchQuery');
+      }
+      queryVars.searchQuery = queryVal;
+    }
+
+    const filterStr = filterParts.length > 0
+      ? `filter: { ${filterParts.join(', ')} }`
       : '';
 
     const query = `
-            query GetTopStats($zoneTag: String!, $start: String, $end: String, $limit: Int!) {
+            query GetTopStats($zoneTag: String!, $start: String, $end: String, $limit: Int!${params.searchQuery ? ', $searchQuery: String!' : ''}) {
                 viewer {
                     zones(filter: { zoneTag: $zoneTag }) {
                         httpRequestsAdaptiveGroups(
@@ -198,12 +250,7 @@ export class AnalyticsApi extends CloudflareApiBase {
       };
     }
 
-    const data = await this.fetchGraphQL<SingleZoneResponse>(query, {
-      zoneTag: params.zoneTag,
-      start: datetimeStart || undefined,
-      end: datetimeEnd || undefined,
-      limit: params.limit,
-    });
+    const data = await this.fetchGraphQL<SingleZoneResponse>(query, queryVars);
 
     const groups = data?.viewer?.zones?.[0]?.httpRequestsAdaptiveGroups ?? [];
     return groups.map(g => ({ ...g.dimensions, count: g.count }));

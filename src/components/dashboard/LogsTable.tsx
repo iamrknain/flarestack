@@ -34,6 +34,16 @@ export function LogsTable({
         }).format(date);
     };
 
+    const timeAgo = (dateInput: Date | string) => {
+        const time = new Date(dateInput).getTime();
+        const diff = Math.floor((Date.now() - time) / 1000);
+        if (diff < 10) return "just now";
+        if (diff < 60) return `${diff}s ago`;
+        if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+        if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+        return `${Math.floor(diff / 86400)}d ago`;
+    };
+
     if (logs.length === 0) {
         return (
             <div className="h-full flex flex-col items-center justify-center py-32 px-12 text-center group">
@@ -110,7 +120,13 @@ export function LogsTable({
                                 )}
                                 <td className="px-6 py-5">
                                     <div className="text-xs font-bold text-slate-700">{formatDate(date)}</div>
-                                    <div className="text-[10px] text-slate-400 font-medium">{formatDateFull(date)}</div>
+                                    <div className="flex items-center gap-1.5 mt-0.5 whitespace-nowrap">
+                                        <span className="text-[10px] text-slate-400 font-medium">{formatDateFull(date)}</span>
+                                        <span className="text-[10px] text-slate-300 font-bold">•</span>
+                                        <span className="text-[10px] text-indigo-600 font-bold bg-indigo-50 px-1 py-0.5 rounded" title={date.toLocaleString()}>
+                                            {timeAgo(date)}
+                                        </span>
+                                    </div>
                                 </td>
                                 <td className="px-6 py-5">
                                     <div className="flex flex-col gap-1">

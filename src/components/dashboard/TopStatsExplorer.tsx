@@ -2,7 +2,8 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import { inputCls, labelCls, glassCls } from "./ui/shared";
 import { DateRangePicker, type DateRange } from "~/components/DateRangePicker";
 import { PushIpToList } from "./cloudflare/PushIpToList";
-import { IpDetails } from "./cloudflare/IpDetails";
+import { ActionSelection, createCopyAction, createLookupAction, createAddToListAction, type SelectionAction } from "./cloudflare/ActionSelection";
+import { IpLookupModal } from "./cloudflare/IpLookupModal";
 import { getTopStatsAction } from "~/server/cloudflare";
 
 export function TopStatsExplorer({
@@ -43,19 +44,47 @@ export function TopStatsExplorer({
     const [selectedItems, setSelectedItems] = useState<Set<number>>(new Set());
     const [errorMsg, setErrorMsg] = useState<string | null>(null);
     const [isDimensionsModalOpen, setIsDimensionsModalOpen] = useState(false);
-    const [isActionDropdownOpen, setIsActionDropdownOpen] = useState(false);
     const [isIpListAddOpen, setIsIpListAddOpen] = useState(false);
-    const [inspectedIp, setInspectedIp] = useState<string | null>(null);
+    const [isIpLookupOpen, setIsIpLookupOpen] = useState(false);
+    const [ipsToPush, setIpsToPush] = useState<string[]>([]);
+    const [searchQuery, setSearchQuery] = useState("");
+    const [deepSearchActive, setDeepSearchActive] = useState(false);
     const dimensionsRef = useRef<HTMLDivElement>(null);
-    const actionRef = useRef<HTMLDivElement>(null);
+
+    const triggerPushIps = (ips: string[]) => {
+        setIpsToPush(ips);
+        setIsIpListAddOpen(true);
+    };
+
+    const displayResults = useMemo(() => {
+        if (deepSearchActive || !searchQuery.trim()) return results;
+        const term = searchQuery.toLowerCase().trim();
+        return results.filter(r => {
+            return Object.keys(r).some(key => {
+                if (key === "count") return false;
+                return String(r[key]).toLowerCase().includes(term);
+            });
+        });
+    }, [results, searchQuery, deepSearchActive]);
+
+    const handleDeepSearch = async () => {
+        if (!searchQuery.trim() || !activeZoneId) return;
+        setDeepSearchActive(true);
+        setSelectedItems(new Set());
+        await handleFetch(searchQuery, true);
+    };
+
+    const handleClearDeepSearch = async () => {
+        setDeepSearchActive(false);
+        setSearchQuery("");
+        setSelectedItems(new Set());
+        await handleFetch("", false);
+    };
 
     useEffect(() => {
         function handleClickOutside(event: MouseEvent) {
             if (dimensionsRef.current && !dimensionsRef.current.contains(event.target as Node)) {
                 setIsDimensionsModalOpen(false);
-            }
-            if (actionRef.current && !actionRef.current.contains(event.target as Node)) {
-                setIsActionDropdownOpen(false);
             }
         }
         document.addEventListener("mousedown", handleClickOutside);
@@ -63,6 +92,14 @@ export function TopStatsExplorer({
     }, []);
 
     const selectedIps = Array.from(selectedItems).map(i => results[i]?.clientIP).filter(Boolean);
+
+    const selectionActions = useMemo<SelectionAction[]>(() => {
+        return [
+            createCopyAction(selectedIps, () => {}),
+            createLookupAction(selectedIps.length, () => setIsIpLookupOpen(true)),
+            createAddToListAction(selectedIps.length, () => triggerPushIps(selectedIps))
+        ];
+    }, [selectedIps]);
 
     useEffect(() => {
         localStorage.setItem("ff_top_stats_dimensions", JSON.stringify(dimensions));
@@ -82,10 +119,13 @@ export function TopStatsExplorer({
         return null;
     }, [dateRange]);
 
-    const handleFetch = async () => {
+    const handleFetch = async (overrideSearchQuery?: string, overrideDeepSearch?: boolean) => {
         if (!activeZoneId) return;
         const zone = zones.find(v => v.id === activeZoneId);
         if (!zone) return;
+
+        const useDeepSearch = overrideDeepSearch !== undefined ? overrideDeepSearch : deepSearchActive;
+        const useQuery = overrideSearchQuery !== undefined ? overrideSearchQuery : searchQuery;
 
         setIsFetching(true);
         try {
@@ -94,7 +134,8 @@ export function TopStatsExplorer({
                 zone.cfZoneId,
                 dimensions.length > 0 ? dimensions : ["clientIP"],
                 windowSeconds || undefined,
-                limit
+                limit,
+                (useDeepSearch && useQuery.trim()) ? useQuery.trim() : undefined
             );
             if (data && "error" in data) {
                 setFetcherData({ error: data.error });
@@ -265,76 +306,79 @@ export function TopStatsExplorer({
                         />
                     </div>
 
+                    {/* Separator */}
+                    <div className="w-px h-6 bg-slate-200 shrink-0" />
+
+                    {/* Search & Deep Search Group */}
+                    <div className="flex items-center gap-1.5 shrink-0 w-full sm:w-auto">
+                        <div className="relative w-full sm:w-[200px] rounded-md border border-slate-200" title="Quick search filters the currently loaded items. Use Deep Search to search all of Cloudflare.">
+                            <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none">
+                                <svg className="w-3.5 h-3.5 text-slate-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                    <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+                                </svg>
+                            </div>
+                            <input
+                                type="text"
+                                placeholder="Search entries..."
+                                value={searchQuery}
+                                onChange={(e) => {
+                                    const val = e.target.value;
+                                    setSearchQuery(val);
+                                    if (!val.trim() && deepSearchActive) {
+                                        handleClearDeepSearch();
+                                    }
+                                }}
+                                onKeyDown={(e) => {
+                                    if (e.key === "Enter") {
+                                        handleDeepSearch();
+                                    }
+                                }}
+                                className="block w-full h-[34px] pl-8 pr-3 text-[11px] font-bold bg-white/50 border-0 shadow-none rounded-md focus:ring-slate-950 placeholder:text-slate-400 placeholder:font-medium focus:outline-none"
+                            />
+                        </div>
+                        <div className="flex items-center rounded-md overflow-hidden border border-violet-200/50 shadow-sm h-[34px] bg-violet-50">
+                            <button
+                                type="button"
+                                onClick={handleDeepSearch}
+                                disabled={isLoading || !searchQuery.trim()}
+                                className="flex items-center justify-center gap-1 bg-violet-50 hover:bg-violet-100 disabled:opacity-40 disabled:cursor-not-allowed text-violet-700 hover:text-violet-900 text-[10px] font-black uppercase tracking-wider px-3 h-full transition-colors active:scale-95 whitespace-nowrap focus:outline-none"
+                                title="Search all matches directly in Cloudflare Analytics"
+                            >
+                                <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                                    <path d="m21 21-6-6m2-5a7 7 0 1 1-14 0 7 7 0 0 1 14 0z" />
+                                </svg>
+                                Deep Search
+                            </button>
+                        </div>
+                        {deepSearchActive && (
+                            <button
+                                type="button"
+                                onClick={handleClearDeepSearch}
+                                className="flex items-center justify-center text-rose-600 hover:text-rose-800 text-[10px] font-black uppercase px-2 h-[34px] transition-colors"
+                                title="Clear deep search filter"
+                            >
+                                Clear
+                            </button>
+                        )}
+                    </div>
+
                     {/* Selection bar — appears when rows are checked */}
                     {selectedItems.size > 0 && (
                         <>
-                            <div className="w-px h-6 bg-slate-200 shrink-0" />
-
-                            <div className="flex flex-wrap items-center gap-2 bg-indigo-50/50 border border-indigo-100/50 py-1 px-3 rounded-md animate-in fade-in slide-in-from-top-2 duration-300">
-                                {/* Count */}
-                                <span className="bg-white border border-indigo-200 text-indigo-700 text-[11px] font-black px-2 py-0.5 rounded-md tabular-nums shadow-sm select-none">{selectedItems.size}</span>
-                                <span className="text-[12px] font-bold text-indigo-900 select-none">selected</span>
-
-                                <div className="w-px h-5 bg-indigo-200/60" />
-
-                                {/* Action dropdown — styled like Dimensions */}
-                                <div className="relative shrink-0" ref={actionRef}>
-                                    <button
-                                        onClick={() => setIsActionDropdownOpen(!isActionDropdownOpen)}
-                                        className="flex items-center gap-2 px-3 h-[28px] text-[11px] font-bold bg-white border border-indigo-200 hover:border-indigo-300 rounded-md shadow-sm text-indigo-900 hover:bg-slate-50 transition-colors whitespace-nowrap"
-                                    >
-                                        Action
-                                        <svg className={`w-3 h-3 text-indigo-400 transition-transform ${isActionDropdownOpen ? 'rotate-180' : ''}`} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="6 9 12 15 18 9" /></svg>
-                                    </button>
-
-                                    {isActionDropdownOpen && (
-                                        <div className="absolute top-full mt-2 left-0 w-56 bg-white rounded-md shadow-xl border border-slate-200 z-50 flex flex-col p-2 gap-0.5 animate-in fade-in zoom-in-95 duration-100">
-                                            <div className="px-3 py-2 border-b border-slate-100 mb-1">
-                                                <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">Actions</div>
-                                            </div>
-
-                                            {/* Add IPs to IP List */}
-                                            <button
-                                                onClick={() => { setIsIpListAddOpen(true); setIsActionDropdownOpen(false); }}
-                                                className="flex items-center gap-3 text-left px-3 py-2 rounded-md transition-all hover:bg-slate-50"
-                                            >
-                                                <div className="w-6 h-6 rounded-md bg-indigo-50 flex items-center justify-center shrink-0">
-                                                    <svg className="w-3.5 h-3.5 text-indigo-500" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
-                                                </div>
-                                                <div>
-                                                    <div className="text-[12px] font-bold text-slate-700">Add IPs to IP List</div>
-                                                    <div className="text-[10px] text-slate-400 font-medium">Push to a Cloudflare IP List</div>
-                                                </div>
-                                            </button>
-
-                                            {/* Firewall Rule — coming soon */}
-                                            <button disabled className="flex items-center gap-3 text-left px-3 py-2 rounded-md opacity-40 cursor-not-allowed">
-                                                <div className="w-6 h-6 rounded-md bg-rose-50 flex items-center justify-center shrink-0">
-                                                    <svg className="w-3.5 h-3.5 text-rose-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><line x1="4.93" y1="4.93" x2="19.07" y2="19.07" /></svg>
-                                                </div>
-                                                <div>
-                                                    <div className="text-[12px] font-bold text-slate-500">Create Firewall Rule <span className="text-[9px] font-black bg-slate-100 text-slate-400 px-1.5 py-0.5 rounded uppercase ml-1">soon</span></div>
-                                                    <div className="text-[10px] text-slate-400 font-medium">Block via WAF rule</div>
-                                                </div>
-                                            </button>
-                                        </div>
-                                    )}
-                                </div>
-
-                                <button
-                                    onClick={() => setSelectedItems(new Set())}
-                                    className="text-[10px] font-bold text-indigo-400 hover:text-indigo-600 uppercase tracking-tight transition-colors"
-                                >
-                                    Clear
-                                </button>
-                            </div>
+                            <div className="w-px h-6 bg-slate-200 shrink-0 hidden sm:block mx-1" />
+                            <ActionSelection
+                                selectedCount={selectedItems.size}
+                                onClear={() => setSelectedItems(new Set())}
+                                placement="bottom"
+                                actions={selectionActions}
+                            />
                         </>
                     )}
 
                     {/* Fetch + Limit — right side */}
                     <div className="flex items-center rounded-md overflow-hidden border border-slate-900 shadow-sm ml-auto shrink-0">
                         <button
-                            onClick={handleFetch}
+                            onClick={() => handleFetch()}
                             disabled={!activeZoneId || isLoading}
                             className="flex items-center justify-center gap-1.5 bg-slate-950 hover:bg-black disabled:opacity-30 disabled:cursor-not-allowed text-white text-[10px] font-bold px-3 h-[34px] transition-colors active:scale-95 whitespace-nowrap"
                         >
@@ -367,20 +411,6 @@ export function TopStatsExplorer({
 
                 </header>
 
-                <PushIpToList
-                    isOpen={isIpListAddOpen}
-                    onClose={() => setIsIpListAddOpen(false)}
-                    onSuccess={() => {
-                        setSelectedItems(new Set());
-                        setIsActionDropdownOpen(false);
-                    }}
-                    selectedIps={selectedIps}
-                    selectedItemsSize={selectedItems.size}
-                    activeZoneId={activeZoneId}
-                    zones={zones}
-                />
-
-
 
                 <div className="w-full flex-1 flex flex-col">
                     <div className="flex-1 min-h-[500px] w-full">
@@ -400,32 +430,10 @@ export function TopStatsExplorer({
                                     Dismiss
                                 </button>
                             </div>
-                        ) : results.length === 0 ? (
-                            <div className="h-full flex flex-col items-center justify-center py-32 px-12 text-center group">
-                                <div className="w-16 h-16 rounded-2xl bg-slate-50 border border-slate-100 flex items-center justify-center mb-6 transition-all group-hover:scale-110 duration-500 shadow-sm relative mx-auto">
-                                    <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" className="text-slate-300">
-                                        <circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" />
-                                    </svg>
-                                    <div className="absolute inset-0 bg-indigo-500/5 rounded-2xl animate-pulse" />
-                                </div>
-                                <h3 className="text-xl font-bold text-slate-900 uppercase tracking-tight italic">No insights yet</h3>
-                                <div className="mt-5 text-left bg-slate-50 border border-slate-200 rounded-xl p-5 max-w-sm w-full mx-auto">
-                                    <p className="text-[13px] font-bold text-slate-700 mb-3">Why am I seeing this?</p>
-                                    <ul className="text-xs text-slate-500 font-medium space-y-2.5">
-                                        <li className="flex items-start gap-2">
-                                            <svg className="w-4 h-4 text-indigo-500 mt-0.5 shrink-0" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></svg>
-                                            <span><strong className="text-slate-700">Time Range:</strong> There genuinely might be no traffic in the current time frame. Try shifting the absolute date back or expanding the relative range.</span>
-                                        </li>
-                                        <li className="flex items-start gap-2">
-                                            <svg className="w-4 h-4 text-indigo-500 mt-0.5 shrink-0" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="20" height="14" x="2" y="5" rx="2" /><line x1="2" x2="22" y1="10" y2="10" /></svg>
-                                            <span><strong className="text-slate-700">Zone Restriction:</strong> You might be filtering by a specific zone that hasn't received any requests. Try switching the dropdown to "All Zones".</span>
-                                        </li>
-                                        <li className="flex items-start gap-2">
-                                            <svg className="w-4 h-4 text-indigo-500 mt-0.5 shrink-0" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" x2="12" y1="15" y2="3" /></svg>
-                                            <span><strong className="text-slate-700">Fetch Missing:</strong> After adjusting the time range or dimensions, make sure to click the <strong>FETCH</strong> button to load data!</span>
-                                        </li>
-                                    </ul>
-                                </div>
+                        ) : displayResults.length === 0 ? (
+                            <div className="h-full flex flex-col items-center justify-center py-20 px-12 text-center">
+                                <h3 className="text-md font-bold text-slate-700">No matches found</h3>
+                                <p className="text-xs text-slate-400 mt-1">Try adjusting your filter or toggling "Deep Query" to search Cloudflare directly.</p>
                             </div>
                         ) : (
                             <div className="relative overflow-x-auto custom-scrollbar bg-white border border-slate-200 shadow-sm ">
@@ -435,10 +443,15 @@ export function TopStatsExplorer({
                                             <th className="px-6 py-5 text-center w-12">
                                                 <input
                                                     type="checkbox"
-                                                    checked={results.length > 0 && selectedItems.size === results.length}
+                                                    checked={displayResults.length > 0 && selectedItems.size === displayResults.length}
                                                     onChange={(e) => {
                                                         if (e.target.checked) {
-                                                            setSelectedItems(new Set(results.map((_, i) => i)));
+                                                            const newSelected = new Set<number>();
+                                                            displayResults.forEach(item => {
+                                                                const idx = results.indexOf(item);
+                                                                if (idx !== -1) newSelected.add(idx);
+                                                            });
+                                                            setSelectedItems(newSelected);
                                                         } else {
                                                             setSelectedItems(new Set());
                                                         }
@@ -475,15 +488,16 @@ export function TopStatsExplorer({
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-slate-100">
-                                        {results.map((r, i) => {
-                                            const isSelected = selectedItems.has(i);
+                                        {displayResults.map((r, i) => {
+                                            const originalIdx = results.indexOf(r);
+                                            const isSelected = selectedItems.has(originalIdx);
                                             return (
                                                 <tr
-                                                    key={i}
+                                                    key={originalIdx}
                                                     onClick={() => {
                                                         const newSet = new Set(selectedItems);
-                                                        if (newSet.has(i)) newSet.delete(i);
-                                                        else newSet.add(i);
+                                                        if (newSet.has(originalIdx)) newSet.delete(originalIdx);
+                                                        else newSet.add(originalIdx);
                                                         setSelectedItems(newSet);
                                                     }}
                                                     className={`transition-all group cursor-pointer ${isSelected ? 'bg-indigo-50/40' : 'hover:bg-slate-50/80'}`}
@@ -494,37 +508,24 @@ export function TopStatsExplorer({
                                                             checked={isSelected}
                                                             onChange={(e) => {
                                                                 const newSet = new Set(selectedItems);
-                                                                if (e.target.checked) newSet.add(i);
-                                                                else newSet.delete(i);
+                                                                if (e.target.checked) newSet.add(originalIdx);
+                                                                else newSet.delete(originalIdx);
                                                                 setSelectedItems(newSet);
                                                             }}
                                                             className="w-4 h-4 rounded-md border-slate-300 text-indigo-600 focus:ring-indigo-600 transition-all cursor-pointer"
                                                         />
                                                     </td>
                                                     <td className="px-4 py-5 text-xs font-black text-slate-300 group-hover:text-slate-500 text-center">
-                                                        #{i + 1}
+                                                        #{originalIdx + 1}
                                                     </td>
                                                     {(dimensions.length > 0 ? dimensions : ["clientIP"]).map(dim => {
                                                         if (dim === "clientIP") {
                                                             const ipVal = r[dim];
                                                             return (
                                                                 <td key={dim} className="px-8 py-5">
-                                                                    {ipVal ? (
-                                                                        <button
-                                                                            onClick={(e) => { e.stopPropagation(); setInspectedIp(ipVal); }}
-                                                                            title="Inspect IP"
-                                                                            className="group/btn flex items-center font-mono text-xs font-bold text-slate-900 bg-white border border-slate-200 pl-3 pr-2.5 py-1 rounded-md shadow-sm hover:border-indigo-400 hover:shadow-md hover:shadow-indigo-500/10 transition-all whitespace-nowrap active:scale-[0.98]"
-                                                                        >
-                                                                            {ipVal}
-                                                                            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="ml-1.5 text-slate-300 group-hover/btn:text-indigo-500 transition-colors">
-                                                                                <path d="m21 21-6-6m6 6v-4.8m0 4.8h-4.8M3 16.2V21m0 0h4.8M3 21l6-6M21 7.8V3m0 0h-4.8M21 3l-6 6M3 7.8V3m0 0h4.8M3 3l6 6" />
-                                                                            </svg>
-                                                                        </button>
-                                                                    ) : (
-                                                                        <span className="font-mono text-xs font-bold text-slate-900 bg-white border border-slate-200 px-4 py-1.5 rounded-md shadow-sm whitespace-nowrap">
-                                                                            Unknown
-                                                                        </span>
-                                                                    )}
+                                                                    <span className="text-xs font-mono font-bold text-slate-900 bg-white border border-slate-200 px-3 py-1.5 rounded-md shadow-sm group-hover:border-indigo-200 transition-colors">
+                                                                        {ipVal || "Unknown"}
+                                                                    </span>
                                                                 </td>
                                                             );
                                                         }
@@ -634,10 +635,23 @@ export function TopStatsExplorer({
                 </div>
             </div >
 
-            <IpDetails
-                isOpen={!!inspectedIp}
-                onClose={() => setInspectedIp(null)}
-                ipAddress={inspectedIp}
+            <IpLookupModal
+                isOpen={isIpLookupOpen}
+                onClose={() => setIsIpLookupOpen(false)}
+                ipAddresses={selectedIps}
+                onAddToList={triggerPushIps}
+            />
+
+            <PushIpToList
+                isOpen={isIpListAddOpen}
+                onClose={() => setIsIpListAddOpen(false)}
+                onSuccess={() => {
+                    setSelectedItems(new Set());
+                }}
+                selectedIps={ipsToPush}
+                selectedItemsSize={ipsToPush.length}
+                activeZoneId={activeZoneId}
+                zones={zones}
             />
         </>
     );

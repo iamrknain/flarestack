@@ -158,8 +158,8 @@ export class ListsApi extends CloudflareApiBase {
     /**
      * Safely adds items to a CF list.
      *
-     * With CacheStore handling deduplication upstream in the rule handler,
-     * this simply attempts a single batch POST.
+     * Deduplication is handled upstream by the caller via ListCache.getIpSet().
+     * This simply attempts a single batch POST.
      *
      * On a duplicate error (shouldn't happen with a warm cache, but can on
      * cold start) the items are returned as `alreadyInList` so the caller

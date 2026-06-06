@@ -83,3 +83,27 @@ export const entityCache = pgTable('entity_cache', {
 }, (t) => [
     primaryKey({ columns: [t.namespace, t.key] })
 ]);
+
+/**
+ * Full item payload cache for Cloudflare Lists.
+ *
+ * Primary key is (cfListId, value) where value = ip | asn.toString() | hostname.
+ * This is the natural key — known immediately on write, no CF roundtrip needed.
+ *
+ * `id` (CF item UUID) is nullable: populated during fullSync, not on syncAfterAdd.
+ * It is only needed when deleting items from CF via the dashboard.
+ */
+export const cfListItemsCache = pgTable('cf_list_items_cache', {
+    cfListId:   varchar('cf_list_id', { length: 255 }).notNull(),
+    value:      varchar('value',      { length: 2048 }).notNull(), // natural PK: ip | asn | hostname
+    id:         varchar('id',         { length: 255 }),            // CF UUID — nullable until fullSync
+    ip:         varchar('ip',         { length: 2048 }),
+    asn:        integer('asn'),
+    hostname:   varchar('hostname',   { length: 2048 }),
+    comment:    text('comment'),
+    createdOn:  timestamp('created_on'),
+    modifiedOn: timestamp('modified_on'),
+    syncedAt:   timestamp('synced_at').notNull(),
+}, (t) => [
+    primaryKey({ columns: [t.cfListId, t.value] })
+]);

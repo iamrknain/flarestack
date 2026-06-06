@@ -5,8 +5,8 @@ import { getDb } from "~/db";
 import { requireAuth, getSession } from "~/lib/auth";
 import { cloudflareAccounts, zoneConfigs, addIpToListRules, underAttackRules, entityCache, actionLogs, wafRules } from "~/db/schema";
 import { eq, and, inArray, desc, sql, gte, lte } from "drizzle-orm";
-import { CloudflareClient, type ListItem } from "~/lib/cloudflare";
-import { CacheStore } from "~/db/cache";
+import { CloudflareClient } from "~/lib/cloudflare";
+import { ListCache } from "~/db/list-cache";
 
 import { getRangeConditions } from "~/lib/filter";
 
@@ -51,10 +51,11 @@ export async function getListsAction(accountRef: string, apiTokenOverride?: stri
   }
 }
 
-export async function getListItemsAction(accountRef: string, listId: string, limit?: number, search?: string) {
+export async function getListItemsAction(accountRef: string, listId: string, limit?: number, search?: string, bypassCache = false) {
   try {
-    const { cf } = await getClient(accountRef);
-    return await cf.lists.getItems(listId, limit, search);
+    const { cf, db } = await getClient(accountRef);
+    const listCache = new ListCache(db, cf, listId);
+    return await listCache.search(search ?? '', limit, bypassCache);
   } catch (error: any) {
     return { error: error.message || "Failed to fetch list items" };
   }
@@ -63,36 +64,29 @@ export async function getListItemsAction(accountRef: string, listId: string, lim
 export async function addListItemsAction(accountRef: string, listId: string, items: { ip: string; comment?: string }[]) {
   try {
     const { cf, db } = await getClient(accountRef);
-    const cacheStore = new CacheStore(db);
-    
+    const listCache = new ListCache(db, cf, listId);
+
     const result = await cf.lists.addItems(listId, items);
-    const addedIps = items.map((i) => i.ip).filter((ip): ip is string => !!ip);
-    if (addedIps.length > 0) {
-      await cacheStore.add(`cf_list:${listId}`, addedIps);
-    }
+    await listCache.syncAfterAdd(items);
+
     return { success: true, added: items.length, operationId: result };
   } catch (error: any) {
     return { error: error.message || "Failed to add items to list" };
   }
 }
 
-export async function deleteListItemsAction(accountRef: string, listId: string, itemIds: string[], ips?: string[]) {
+export async function deleteListItemsAction(accountRef: string, listId: string, values: string[]) {
+  if (values.length === 0) return { success: true, deleted: 0, operationIds: [] };
   try {
     const { cf, db } = await getClient(accountRef);
-    const cacheStore = new CacheStore(db);
-    
-    let deletedIps = ips || [];
-    if (!ips) {
-      const listItemsBefore = await cf.lists.getItems(listId);
-      const deletedItemMap = new Map<string, string | undefined>(listItemsBefore.map((i: ListItem) => [i.id, i.ip]));
-      deletedIps = itemIds.map((id) => deletedItemMap.get(id)).filter((ip): ip is string => !!ip);
-    }
+    const listCache = new ListCache(db, cf, listId);
+
+    // Resolve CF UUIDs for each value: db first, CF search fallback for nulls
+    const itemIds = await listCache.resolveIds(values);
+    if (itemIds.length === 0) return { error: "Could not resolve CF item IDs for the given values" };
 
     const operationIds = await cf.lists.deleteItems(listId, itemIds);
-
-    if (deletedIps.length > 0) {
-      await cacheStore.remove(`cf_list:${listId}`, deletedIps);
-    }
+    await listCache.syncAfterRemove(values);
 
     return { success: true, deleted: itemIds.length, operationIds };
   } catch (error: any) {
@@ -100,7 +94,41 @@ export async function deleteListItemsAction(accountRef: string, listId: string, 
   }
 }
 
-export async function getTopStatsAction(accountRef: string, zoneTag: string, dimensions: string[], windowSeconds?: number, limit = 10) {
+/**
+ * Full rebuild of the db cache for a list from Cloudflare.
+ * After this, comment/description searches are served instantly from db.
+ * Called when the user clicks the Cache button.
+ */
+export async function syncListItemsCacheAction(accountRef: string, listId: string) {
+  try {
+    const { cf, db } = await getClient(accountRef);
+    const synced = await new ListCache(db, cf, listId).fullSync();
+    return { success: true, synced };
+  } catch (error: any) {
+    return { error: error.message || "Failed to sync list items cache" };
+  }
+}
+
+export async function clearListItemsCacheAction(accountRef: string, listId: string) {
+  try {
+    const { cf, db } = await getClient(accountRef);
+    await new ListCache(db, cf, listId).clear();
+    return { success: true };
+  } catch (error: any) {
+    return { error: error.message || "Failed to clear list items cache" };
+  }
+}
+
+export async function getListCacheStatusAction(accountRef: string, listId: string) {
+  try {
+    const { cf, db } = await getClient(accountRef);
+    return await new ListCache(db, cf, listId).status();
+  } catch (error: any) {
+    return { error: error.message || "Failed to get cache status" };
+  }
+}
+
+export async function getTopStatsAction(accountRef: string, zoneTag: string, dimensions: string[], windowSeconds?: number, limit = 10, searchQuery?: string) {
   try {
     const { cf } = await getClient(accountRef);
     return await cf.analytics.getTopStats({
@@ -108,6 +136,7 @@ export async function getTopStatsAction(accountRef: string, zoneTag: string, dim
       dimensions,
       windowSeconds,
       limit,
+      searchQuery,
     });
   } catch (error: any) {
     return { error: error.message || "Failed to fetch top stats" };

@@ -1,17 +1,19 @@
 import { useEffect, useState } from "react";
 import { fetchIpDetails, getFlagEmoji, type IpDetailsData } from "~/lib/ip-lookup";
-import { ListActionSelection, createCopyAction, createDeleteAction } from "./ListActionSelection";
+import { ActionSelection, createCopyAction, createDeleteAction, createAddToListAction } from "./ActionSelection";
 
 export function IpLookupModal({
     isOpen,
     onClose,
     ipAddresses,
-    onDeleteSelected
+    onDeleteSelected,
+    onAddToList
 }: {
     isOpen: boolean;
     onClose: () => void;
     ipAddresses: string[];
     onDeleteSelected?: (ips: string[]) => Promise<void>;
+    onAddToList?: (ips: string[]) => void | Promise<void>;
 }) {
     const [loading, setLoading] = useState(false);
     const [detailsList, setDetailsList] = useState<IpDetailsData[]>([]);
@@ -62,6 +64,57 @@ export function IpLookupModal({
     const activeDetails = detailsList.find(d => d.ip === expandedIp);
     const lat = activeDetails?.latitude;
     const lon = activeDetails?.longitude;
+
+    const modalActions = [
+        createCopyAction(checkedIps, () => {
+            setCopied(true);
+            setTimeout(() => setCopied(false), 2000);
+        })
+    ];
+
+    if (onDeleteSelected) {
+        modalActions.push(
+            createDeleteAction(
+                checkedIps.size,
+                async () => {
+                    const ips = Array.from(checkedIps);
+                    if (ips.length === 0) return;
+                    if (!confirm(`Are you sure you want to delete the ${ips.length} selected IP(s) from Cloudflare?`)) return;
+
+                    setModalDeleteLoading(true);
+                    try {
+                        await onDeleteSelected(ips);
+
+                        // Remove deleted IPs from local modal list
+                        const remaining = detailsList.filter(d => !ips.includes(d.ip));
+                        setDetailsList(remaining);
+                        setCheckedIps(new Set());
+
+                        // Reset active detail projection
+                        if (expandedIp && ips.includes(expandedIp)) {
+                            setExpandedIp(remaining.length > 0 ? remaining[0].ip : null);
+                        }
+                    } catch (err: any) {
+                        console.error("Failed to delete IPs from modal:", err);
+                        alert(`Modal Delete Error: ${err.message || err}`);
+                    } finally {
+                        setModalDeleteLoading(false);
+                    }
+                },
+                modalDeleteLoading
+            )
+        );
+    }
+
+    if (onAddToList) {
+        modalActions.push(
+            createAddToListAction(checkedIps.size, () => {
+                const ips = Array.from(checkedIps);
+                if (ips.length === 0) return;
+                onAddToList(ips);
+            })
+        );
+    }
 
     return (
         <div onClick={onClose} className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/45 backdrop-blur-sm animate-in fade-in duration-150">
@@ -131,7 +184,16 @@ export function IpLookupModal({
                                         return (
                                             <div
                                                 key={details.ip}
-                                                onClick={() => setExpandedIp(details.ip)}
+                                                onClick={() => {
+                                                    const next = new Set(checkedIps);
+                                                    if (next.has(details.ip)) {
+                                                        next.delete(details.ip);
+                                                    } else {
+                                                        next.add(details.ip);
+                                                    }
+                                                    setCheckedIps(next);
+                                                    setExpandedIp(details.ip);
+                                                }}
                                                 className={`p-4 rounded-xl border transition-all cursor-pointer flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${isSelected
                                                         ? "bg-violet-50/20 border-violet-200 shadow-sm"
                                                         : "bg-white border-slate-100 hover:border-slate-200"
@@ -231,47 +293,12 @@ export function IpLookupModal({
                                     <span className="text-[10px] font-black uppercase text-slate-500 tracking-wider">Select All</span>
                                 </div>
 
-                                <ListActionSelection
+                                <ActionSelection
                                     selectedCount={checkedIps.size}
                                     onClear={() => setCheckedIps(new Set())}
                                     placement="top"
                                     align="right"
-                                    actions={[
-                                        createCopyAction(checkedIps, () => {
-                                            setCopied(true);
-                                            setTimeout(() => setCopied(false), 2000);
-                                        }),
-                                        createDeleteAction(
-                                            checkedIps.size,
-                                            async () => {
-                                                if (!onDeleteSelected) return;
-                                                const ips = Array.from(checkedIps);
-                                                if (ips.length === 0) return;
-                                                if (!confirm(`Are you sure you want to delete the ${ips.length} selected IP(s) from Cloudflare?`)) return;
-
-                                                setModalDeleteLoading(true);
-                                                try {
-                                                    await onDeleteSelected(ips);
-
-                                                    // Remove deleted IPs from local modal list
-                                                    const remaining = detailsList.filter(d => !ips.includes(d.ip));
-                                                    setDetailsList(remaining);
-                                                    setCheckedIps(new Set());
-
-                                                    // Reset active detail projection
-                                                    if (expandedIp && ips.includes(expandedIp)) {
-                                                        setExpandedIp(remaining.length > 0 ? remaining[0].ip : null);
-                                                    }
-                                                } catch (err: any) {
-                                                    console.error("Failed to delete IPs from modal:", err);
-                                                    alert(`Modal Delete Error: ${err.message || err}`);
-                                                } finally {
-                                                    setModalDeleteLoading(false);
-                                                }
-                                            },
-                                            modalDeleteLoading
-                                        )
-                                    ]}
+                                    actions={modalActions}
                                 />
                             </div>
                         )}
