@@ -2,14 +2,14 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { useUser } from "~/hooks/useUser";
+import { useUserContext } from "~/context/UserContext";
 import { updateProfileAction } from "~/server/auth";
 import { glassCls, inputCls } from "~/components/dashboard/ui/shared";
 import CronTokenGenerator from "~/components/dashboard/CronTokenGenerator";
 
 export default function ProfilePage() {
     const router = useRouter();
-    const { user, loading: fetching, mutate: loadUser } = useUser();
+    const { user, loading: fetching, refreshUser: loadUser } = useUserContext();
     const [isEditingName, setIsEditingName] = useState(false);
     const [newName, setNewName] = useState("");
     const [isSaving, setIsSaving] = useState(false);

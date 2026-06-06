@@ -30,7 +30,6 @@ export default function VercelPage() {
         vercelProjects: any[];
         rules: any[];
         recentActions: any[];
-        totalBlocks: number;
         zoneConfigs?: any[];
     } | null>(null);
 
@@ -79,7 +78,6 @@ export default function VercelPage() {
     const vercelProjects = data?.vercelProjects || [];
     const rules = data?.rules || [];
     const recentActions = data?.recentActions || [];
-    const totalBlocks = data?.totalBlocks || 0;
     const zoneConfigs = data?.zoneConfigs || [];
 
     const vercelActions = recentActions.filter(a => a.provider === "vercel");
@@ -191,7 +189,6 @@ export default function VercelPage() {
 
                 <MetricsGrid
                     count={vercelProjects.length}
-                    totalBlocks={totalBlocks}
                     activeRulesCount={vercelActiveRules.length}
                     rangeLabel={dateRange.type === "all" ? "All Time" : (dateRange.type === "relative" ? `Last ${dateRange.relativeValue}` : "Custom Range")}
                     type="vercel"

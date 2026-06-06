@@ -1,4 +1,4 @@
-export function MetricsGrid({ count, activeRulesCount, type = 'zone' }: { count: number; totalBlocks: number; activeRulesCount: number; rangeLabel?: string; type?: 'zone' | 'vercel' }) {
+export function MetricsGrid({ count, activeRulesCount, type = 'zone' }: { count: number; activeRulesCount: number; rangeLabel?: string; type?: 'zone' | 'vercel' }) {
     const isActive = count > 0 && activeRulesCount > 0;
     const label = type === 'vercel' ? 'project' : 'zone';
 

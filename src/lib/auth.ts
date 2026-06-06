@@ -141,7 +141,7 @@ export async function getCurrentUser(): Promise<AuthenticatedUser | null> {
 export async function requireAuth(): Promise<AuthenticatedUser> {
   const sessionData = await getSession();
   if (!sessionData || !sessionData.user) {
-    redirect("/login");
+    throw new Error("Unauthorized");
   }
   return sessionData.user as AuthenticatedUser;
 }
@@ -159,5 +159,6 @@ export async function logout(): Promise<never> {
   } catch {
     // Cookies not available outside of request context
   }
-  redirect("/login");
+  redirect("/");
 }
+

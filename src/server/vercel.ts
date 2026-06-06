@@ -4,7 +4,7 @@ import { headers } from "next/headers";
 import { getDb } from "~/db";
 import { getSession, requireAuth } from "~/lib/auth";
 import { vercelAccounts, vercelProjects, vercelUnderAttackRules, vercelBotProtectionRules, activityLogs, zoneConfigs } from "~/db/schema";
-import { and, eq, desc, sql } from "drizzle-orm";
+import { and, eq, desc, sql, inArray } from "drizzle-orm";
 import { getRangeConditions } from "~/lib/filter";
 import { VercelClient } from "~/lib/vercel";
 
@@ -60,7 +60,6 @@ export async function getVercelDataAction(searchParams: any) {
       accountsResult,
       projectsResult,
       recentActionsResult,
-      countResult,
       zonesResult,
       ...ruleResults
     ] = await Promise.all([
@@ -81,10 +80,6 @@ export async function getVercelDataAction(searchParams: any) {
         .orderBy(desc(activityLogs.timestamp))
         .limit(10),
       db
-        .select({ count: sql<number>`count(*)` })
-        .from(activityLogs)
-        .where(and(...conditions, eq(activityLogs.provider as any, "vercel"))),
-      db
         .select()
         .from(zoneConfigs)
         .where(eq(zoneConfigs.userId as any, userId))
@@ -93,7 +88,6 @@ export async function getVercelDataAction(searchParams: any) {
       db.select().from(vercelBotProtectionRules).where(eq(vercelBotProtectionRules.userId as any, userId)).orderBy(desc(vercelBotProtectionRules.createdAt)),
     ]);
 
-    const totalBlocks = (countResult[0]?.count ?? 0) as number;
     const rules = [
       ...(ruleResults[0] as any[]).map((r) => ({ ...r, type: "vercel_under_attack_mode" })),
       ...(ruleResults[1] as any[]).map((r) => ({ ...r, type: "vercel_bot_protection" })),
@@ -105,7 +99,6 @@ export async function getVercelDataAction(searchParams: any) {
         vercelAccounts: accountsResult,
         vercelProjects: projectsResult,
         recentActions: recentActionsResult,
-        totalBlocks,
         rules,
         zoneConfigs: zonesResult,
       }
@@ -582,4 +575,163 @@ export async function editVercelProject(
     .where(and(eq(vercelProjects.id, projectId), eq(vercelProjects.userId as any, userId)) as any);
 
   return { success: true };
+}
+
+export async function getVercelRuleStatus() {
+    const reqHeaders = await headers();
+    const cookieHeader = reqHeaders.get("cookie") || undefined;
+    const sessionData = await getSession(cookieHeader);
+    if (!sessionData?.user) {
+        return { error: "Unauthorized" };
+    }
+    const userId = sessionData.user.id;
+    const db = getDb();
+    
+    try {
+        // Fetch vercel projects and their associated vercel accounts
+        const vercelList = await db
+            .select({
+                projectId: vercelProjects.id,
+                vercelProjectId: vercelProjects.vercelProjectId,
+                name: vercelProjects.name,
+                vercelToken: vercelAccounts.vercelToken,
+                vercelTeamId: vercelAccounts.vercelTeamId
+            })
+            .from(vercelProjects)
+            .innerJoin(vercelAccounts, eq(vercelProjects.vercelAccountRef, vercelAccounts.id))
+            .where(eq(vercelProjects.userId, userId));
+            
+        // Fetch all under-attack and bot protection rules for these projects
+        const attackRules = await db
+            .select()
+            .from(vercelUnderAttackRules)
+            .where(eq(vercelUnderAttackRules.userId, userId));
+
+        const botRules = await db
+            .select()
+            .from(vercelBotProtectionRules)
+            .where(eq(vercelBotProtectionRules.userId, userId));
+
+        // For each project, decide if rules are active by querying activityLogs, falling back to Vercel API
+        const vercelStatuses = await Promise.all(
+            vercelList.map(async (project) => {
+                const projAttackRules = attackRules.filter((r) => r.vercelProjectRef === project.projectId);
+                const projBotRules = botRules.filter((r) => r.vercelProjectRef === project.projectId);
+
+                let underAttackLive = false;
+                let botProtectionLive = false;
+
+                // 1. Determine Under Attack status
+                let hasAttackLog = false;
+                if (projAttackRules.length > 0) {
+                    const ruleIds = projAttackRules.map((r) => r.id);
+                    const [latestLog] = await db
+                        .select()
+                        .from(activityLogs)
+                        .where(
+                            and(
+                                eq(activityLogs.userId, userId),
+                                inArray(activityLogs.ruleId, ruleIds),
+                                inArray(activityLogs.actionTaken, ["VERCEL_ATTACK_MODE_ON", "VERCEL_ATTACK_MODE_OFF"])
+                            )
+                        )
+                        .orderBy(desc(activityLogs.timestamp))
+                        .limit(1);
+
+                    if (latestLog) {
+                        hasAttackLog = true;
+                        underAttackLive = latestLog.actionTaken === "VERCEL_ATTACK_MODE_ON";
+                    }
+                }
+
+                // Fallback to Vercel API or DB config if no activity logs exist yet
+                if (!hasAttackLog) {
+                    try {
+                        const client = new VercelClient(project.vercelToken, project.vercelTeamId);
+                        const projectInfo = await client.projects.get(project.vercelProjectId);
+                        underAttackLive = projectInfo.security?.attackModeEnabled ?? false;
+                    } catch (err) {
+                        // fallback to database rule status
+                        underAttackLive = projAttackRules.some((r) => r.isActive);
+                    }
+                }
+
+                // 2. Determine Bot Protection status
+                let hasBotLog = false;
+                if (projBotRules.length > 0) {
+                    const ruleIds = projBotRules.map((r) => r.id);
+                    const [latestLog] = await db
+                        .select()
+                        .from(activityLogs)
+                        .where(
+                            and(
+                                eq(activityLogs.userId, userId),
+                                inArray(activityLogs.ruleId, ruleIds),
+                                inArray(activityLogs.actionTaken, ["VERCEL_BOT_PROTECTION_ON", "VERCEL_BOT_PROTECTION_OFF"])
+                            )
+                        )
+                        .orderBy(desc(activityLogs.timestamp))
+                        .limit(1);
+
+                    if (latestLog) {
+                        hasBotLog = true;
+                        botProtectionLive = latestLog.actionTaken === "VERCEL_BOT_PROTECTION_ON";
+                    }
+                }
+
+                if (!hasBotLog) {
+                    try {
+                        const client = new VercelClient(project.vercelToken, project.vercelTeamId);
+                        const firewallConfig = await client.firewall.getConfig(project.vercelProjectId);
+                        botProtectionLive = !!firewallConfig.managedRules?.bot_protection?.active;
+                    } catch (err) {
+                        // fallback to database rule status
+                        botProtectionLive = projBotRules.some((r) => r.isActive);
+                    }
+                }
+
+                const rulesStatus: any[] = [];
+
+                // A. Vercel Under Attack
+                if (projAttackRules.length > 0) {
+                    for (const rule of projAttackRules) {
+                        rulesStatus.push({
+                            id: rule.id,
+                            name: rule.name || "Under Attack Mode",
+                            type: "vercel_under_attack_mode",
+                            dbStatus: rule.isActive ? "ACTIVE" : "INACTIVE",
+                            liveStatus: underAttackLive ? "ON" : "OFF"
+                        });
+                    }
+                }
+
+                // B. Vercel Bot Protection
+                if (projBotRules.length > 0) {
+                    for (const rule of projBotRules) {
+                        rulesStatus.push({
+                            id: rule.id,
+                            name: rule.name || "Bot Protection",
+                            type: "vercel_bot_protection",
+                            dbStatus: rule.isActive ? "ACTIVE" : "INACTIVE",
+                            liveStatus: botProtectionLive ? "ON" : "OFF"
+                        });
+                    }
+                }
+
+                return {
+                    id: project.projectId,
+                    rules: rulesStatus
+                };
+            })
+        );
+        
+        return {
+            success: true,
+            vercel: vercelStatuses
+        };
+        
+    } catch (err: any) {
+        console.error("Failed to fetch live Vercel protection statuses:", err?.message || err);
+        return { error: err.message || "Failed to fetch live statuses" };
+    }
 }

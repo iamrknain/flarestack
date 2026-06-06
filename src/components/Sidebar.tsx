@@ -4,16 +4,21 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState, useEffect } from "react";
 import { Logo } from "~/components/Logo";
+import { useUserContext } from "~/context/UserContext";
 
 interface SidebarProps {
-    isOpen: boolean;
-    setIsOpen: (v: boolean) => void;
+    isOpen?: boolean;
+    setIsOpen?: (v: boolean) => void;
 }
 
-export function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
+export function Sidebar({ isOpen: propsIsOpen, setIsOpen: propsSetIsOpen }: SidebarProps = {}) {
     const pathname = usePathname();
     const [isCollapsed, setIsCollapsed] = useState(false);
     const [isLoaded, setIsLoaded] = useState(false);
+    const { isSidebarOpen, setIsSidebarOpen } = useUserContext();
+
+    const isOpen = propsIsOpen !== undefined ? propsIsOpen : isSidebarOpen;
+    const setIsOpen = propsSetIsOpen !== undefined ? propsSetIsOpen : setIsSidebarOpen;
 
     useEffect(() => {
         const saved = localStorage.getItem("sidebar-collapsed");
@@ -27,8 +32,8 @@ export function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
         }
     }, [isCollapsed, isLoaded]);
 
-    const isDashboard = pathname.startsWith("/dashboard");
-    const currentTab = pathname.split("/")[2] || "overview";
+    const isDashboard = pathname?.startsWith("/dashboard") || false;
+    const currentTab = pathname?.split("/")[2] || "overview";
 
     return (
         <>
@@ -41,12 +46,11 @@ export function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
 
             <aside
                 className={[
-                    "transition-all duration-300 ease-in-out flex flex-col",
+                    "transition-all duration-300 ease-in-out flex flex-col bg-white border-r border-slate-200",
                     isCollapsed ? "md:w-20" : "md:w-72",
-                    "md:sticky md:top-0 md:h-screen md:flex md:flex-shrink-0 md:translate-x-0 md:shadow-none md:z-0",
-                    "fixed top-0 bottom-0 left-0 z-50 w-72",
-                    "bg-white border-r border-slate-200",
-                    isOpen ? "translate-x-0 shadow-2xl" : "-translate-x-full md:translate-x-0",
+                    "md:relative md:h-screen md:flex md:flex-shrink-0 md:shadow-none md:z-0",
+                    "max-md:fixed max-md:top-0 max-md:bottom-0 max-md:left-0 max-md:z-50 max-md:w-72",
+                    isOpen ? "translate-x-0 shadow-2xl" : "max-md:-translate-x-full",
                 ].join(" ")}
             >
                 <div className="flex items-center gap-3 px-6 h-16 border-b border-slate-200 flex-shrink-0">
@@ -80,6 +84,21 @@ export function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
                             </div>
                         )}
                         <div className="space-y-1">
+                            <Link
+                                href="/dashboard"
+                                onClick={() => setIsOpen(false)}
+                                className={`flex items-center gap-3 px-4 py-2 rounded-md text-sm font-bold transition-all ${isCollapsed ? "justify-center px-0 w-12 mx-auto" : ""} ${isDashboard && currentTab === "overview"
+                                    ? "bg-white text-indigo-600 shadow-lg shadow-indigo-100/50 border border-indigo-100"
+                                    : "text-slate-500 hover:text-slate-900 hover:bg-white hover:shadow-sm"
+                                    }`}
+                                title={isCollapsed ? "Overview" : ""}
+                            >
+                                <svg className="flex-shrink-0" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                    <rect x="3" y="3" width="7" height="9" rx="1" /><rect x="14" y="3" width="7" height="5" rx="1" /><rect x="14" y="12" width="7" height="9" rx="1" /><rect x="3" y="16" width="7" height="5" rx="1" />
+                                </svg>
+                                {!isCollapsed && <span className="truncate">Overview</span>}
+                            </Link>
+
                             <Link
                                 href="/dashboard/cloudflare"
                                 onClick={() => setIsOpen(false)}

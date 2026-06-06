@@ -11,13 +11,12 @@ export default async function LandingPage() {
 
   return (
     <div className="w-full relative isolate bg-[#FAFAFA] selection:bg-orange-100 selection:text-orange-900 font-sans">
-      <Header user={user} />
       
       {/* ─── Brutalist Minimal Background ─── */}
-      <div className="fixed inset-0 pointer-events-none -z-10 bg-[#FAFAFA]" />
+      <div className="absolute inset-0 pointer-events-none -z-10 bg-[#FAFAFA]" />
       
       {/* Harder geometric grid instead of soft glows */}
-      <div className="fixed inset-0 pointer-events-none overflow-hidden -z-10 opacity-[0.4]" 
+      <div className="absolute inset-0 pointer-events-none overflow-hidden -z-10 opacity-[0.4]" 
            style={{ backgroundImage: 'linear-gradient(to right, #E5E7EB 1px, transparent 1px), linear-gradient(to bottom, #E5E7EB 1px, transparent 1px)', backgroundSize: '6rem 6rem' }} />
 
       <main className="flex flex-col items-center pb-24">
@@ -41,7 +40,7 @@ export default async function LandingPage() {
 
           <div className="flex flex-col sm:flex-row gap-4 sm:gap-6 mt-10 md:mt-14 animate-fade-in-up animation-delay-200 w-full sm:w-auto">
             <Link
-              href={user ? "/dashboard" : "/register"}
+              href={user ? "/dashboard" : "/?auth=register"}
               className="group relative flex items-center justify-center bg-orange-500 text-slate-950 text-[14px] sm:text-[15px] font-black px-8 sm:px-10 h-12 sm:h-14 border-2 border-slate-950 shadow-[4px_4px_0px_0px_rgba(15,23,42,1)] transition-all hover:translate-y-0.5 hover:shadow-[2px_2px_0px_0px_rgba(15,23,42,1)] active:translate-y-1.5 active:shadow-none uppercase tracking-widest w-full sm:w-auto"
             >
               Start Filtering

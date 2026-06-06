@@ -31,7 +31,6 @@ export default function CloudflarePage() {
         zones: any[];
         rules: any[];
         recentActions: any[];
-        totalBlocks: number;
     } | null>(null);
 
     const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
@@ -81,7 +80,6 @@ export default function CloudflarePage() {
     const zones = data?.zones || [];
     const rules = data?.rules || [];
     const recentActions = data?.recentActions || [];
-    const totalBlocks = data?.totalBlocks || 0;
 
     const cfActions = recentActions.filter(a => a.provider === "cloudflare");
     const cfRuleTypes = ["add_ip_to_list", "under_attack_mode", "waf_rule", "js_challenge", "block_country"];
@@ -178,7 +176,6 @@ export default function CloudflarePage() {
 
                 <MetricsGrid
                     count={zones.length}
-                    totalBlocks={totalBlocks}
                     activeRulesCount={cfActiveRules.length}
                     rangeLabel={dateRange.type === "all" ? "All Time" : (dateRange.type === "relative" ? `Last ${dateRange.relativeValue}` : "Custom Range")}
                     type="zone"

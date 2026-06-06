@@ -159,7 +159,6 @@ export async function getCloudflareDataAction(searchParams: any) {
       accountsResult,
       zonesResult,
       recentActionsResult,
-      countResult,
       ...ruleResults
     ] = await Promise.all([
       db
@@ -178,16 +177,11 @@ export async function getCloudflareDataAction(searchParams: any) {
         .where(and(...conditions, eq(activityLogs.provider as any, "cloudflare")))
         .orderBy(desc(activityLogs.timestamp))
         .limit(10),
-      db
-        .select({ count: sql<number>`count(*)` })
-        .from(activityLogs)
-        .where(and(...conditions, eq(activityLogs.provider as any, "cloudflare"))),
       db.select().from(addIpToListRules).where(eq(addIpToListRules.userId as any, userId)).orderBy(desc(addIpToListRules.createdAt)),
       db.select().from(underAttackRules).where(eq(underAttackRules.userId as any, userId)).orderBy(desc(underAttackRules.createdAt)),
       db.select().from(wafRules).where(eq(wafRules.userId as any, userId)).orderBy(desc(wafRules.createdAt)),
     ]);
 
-    const totalBlocks = (countResult[0]?.count ?? 0) as number;
     const rules = [
       ...(ruleResults[0] as any[]).map((r) => ({ ...r, type: "add_ip_to_list" })),
       ...(ruleResults[1] as any[]).map((r) => ({ ...r, type: "under_attack_mode" })),
@@ -200,7 +194,6 @@ export async function getCloudflareDataAction(searchParams: any) {
         accounts: accountsResult,
         zones: zonesResult,
         recentActions: recentActionsResult,
-        totalBlocks,
         rules,
       }
     };
@@ -991,6 +984,154 @@ export async function fetchIpDetailsAction(ip: string) {
       return { ip: cleanIp, error: "Unable to retrieve IP details" };
     }
   }
+}
+
+export async function getCloudflareRuleStatus() {
+    const reqHeaders = await headers();
+    const cookieHeader = reqHeaders.get("cookie") || undefined;
+    const sessionData = await getSession(cookieHeader);
+    if (!sessionData?.user) {
+        return { error: "Unauthorized" };
+    }
+    
+    const userId = sessionData.user.id;
+    const db = getDb();
+    
+    try {
+        // Fetch all DB rules for this user to correlate
+        const dbWafRules = await db
+            .select()
+            .from(wafRules)
+            .where(eq(wafRules.userId, userId));
+
+        const dbUnderAttackRules = await db
+            .select()
+            .from(underAttackRules)
+            .where(eq(underAttackRules.userId, userId));
+
+        const dbIpListRules = await db
+            .select()
+            .from(addIpToListRules)
+            .where(eq(addIpToListRules.userId, userId));
+
+        // Fetch zones and their associated cloudflare accounts
+        const zonesList = await db
+            .select({
+                zoneId: zoneConfigs.id,
+                cfZoneId: zoneConfigs.cfZoneId,
+                name: zoneConfigs.name,
+                cfAccountId: cloudflareAccounts.cfAccountId,
+                cfApiToken: cloudflareAccounts.cfApiToken
+            })
+            .from(zoneConfigs)
+            .innerJoin(cloudflareAccounts, eq(zoneConfigs.cfAccountRef, cloudflareAccounts.id))
+            .where(eq(zoneConfigs.userId, userId));
+            
+        // Query Cloudflare API for each zone's security level and WAF rules in parallel
+        const cfStatuses = await Promise.all(
+            zonesList.map(async (zone) => {
+                let level = "unknown";
+                let liveWafRules: any[] = [];
+                const zoneWafRules = dbWafRules.filter((r) => r.zoneConfigId === zone.zoneId);
+                const zoneUnderAttackRules = dbUnderAttackRules.filter((r) => r.zoneConfigId === zone.zoneId);
+                const zoneIpListRules = dbIpListRules.filter((r) => r.zoneConfigId === zone.zoneId);
+
+                try {
+                    const cf = new CloudflareClient(zone.cfAccountId, zone.cfApiToken);
+                    
+                    // 1. Fetch live under-attack level
+                    level = await cf.zones.getSecurityLevel(zone.cfZoneId);
+
+                    // 2. Fetch live WAF rule statuses directly from Cloudflare account
+                    try {
+                        const rulesets = await cf.rulesets.getRulesets(zone.cfZoneId);
+                        const customRuleset = rulesets.find(
+                            (r) => r.phase === "http_request_firewall_custom" && r.kind === "zone"
+                        );
+                        if (customRuleset) {
+                            const fullRuleset = await cf.rulesets.getRuleset(zone.cfZoneId, customRuleset.id);
+                            liveWafRules = fullRuleset.rules ?? [];
+                        }
+                    } catch (wafErr: any) {
+                        console.error(`Failed to get live WAF ruleset for zone ${zone.name}:`, wafErr?.message || wafErr);
+                    }
+                } catch (err: any) {
+                    console.error(`Failed to get live status for zone ${zone.name}:`, err?.message || err);
+                }
+
+                // Correlate rules to their DB configuration status & Live Status
+                const rulesStatus: any[] = [];
+
+                // A. Under Attack Rules
+                if (zoneUnderAttackRules.length > 0) {
+                    for (const rule of zoneUnderAttackRules) {
+                        rulesStatus.push({
+                            id: rule.id,
+                            name: rule.name || "Under Attack Mode",
+                            type: "under_attack_mode",
+                            dbStatus: rule.isActive ? "ACTIVE" : "INACTIVE",
+                            liveStatus: level === "under_attack" ? "ON" : "OFF"
+                        });
+                    }
+                }
+
+                // B. WAF Rules (correlating live Cloudflare custom rulesets against local DB config)
+                const matchedLiveIds = new Set<string>();
+
+                for (const liveRule of liveWafRules) {
+                    const dbRule = zoneWafRules.find((r) => r.cfRuleId === liveRule.id);
+                    if (dbRule) {
+                        matchedLiveIds.add(dbRule.id);
+                        rulesStatus.push({
+                            id: dbRule.id,
+                            name: dbRule.name,
+                            type: "waf_rule",
+                            dbStatus: dbRule.isActive ? "ACTIVE" : "INACTIVE",
+                            liveStatus: liveRule.enabled ? "ON" : "OFF"
+                        });
+                    }
+                }
+
+                // Add WAF rules that are in DB but somehow not live in Cloudflare's WAF
+                for (const dbRule of zoneWafRules) {
+                    if (!matchedLiveIds.has(dbRule.id)) {
+                        rulesStatus.push({
+                            id: dbRule.id,
+                            name: dbRule.name,
+                            type: "waf_rule",
+                            dbStatus: dbRule.isActive ? "ACTIVE" : "INACTIVE",
+                            liveStatus: "OFF"
+                        });
+                    }
+                }
+
+                // C. IP List Rules
+                for (const rule of zoneIpListRules) {
+                    rulesStatus.push({
+                        id: rule.id,
+                        name: rule.name || "IP List Rule",
+                        type: "add_ip_to_list",
+                        dbStatus: rule.isActive ? "ACTIVE" : "INACTIVE",
+                        liveStatus: rule.isActive ? "ON" : "OFF"
+                    });
+                }
+
+                return {
+                    id: zone.zoneId,
+                    rules: rulesStatus
+                };
+            })
+        );
+        
+        return {
+            success: true,
+            cloudflare: cfStatuses
+        };
+        
+    } catch (err: any) {
+        console.error("Failed to fetch live Cloudflare protection statuses:", err?.message || err);
+        return { error: err.message || "Failed to fetch live statuses" };
+    }
 }
 
 
