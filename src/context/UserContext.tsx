@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useState, useEffect } from "react";
+import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
 import { getCurrentUserAction, logoutAction } from "~/server/auth";
 
 export interface User {
@@ -71,23 +71,23 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     fetchUser();
   }, []);
 
-  const openLogin = (targetPath?: string) => {
+  const openLogin = useCallback((targetPath?: string) => {
     setAuthModal({ isOpen: true, mode: "login", targetPath });
-  };
+  }, []);
 
-  const openRegister = (targetPath?: string) => {
+  const openRegister = useCallback((targetPath?: string) => {
     setAuthModal({ isOpen: true, mode: "register", targetPath });
-  };
+  }, []);
 
-  const closeAuthModal = () => {
+  const closeAuthModal = useCallback(() => {
     setAuthModal((prev) => ({ ...prev, isOpen: false }));
-  };
+  }, []);
 
-  const setAuthMode = (mode: AuthMode) => {
+  const setAuthMode = useCallback((mode: AuthMode) => {
     setAuthModal((prev) => ({ ...prev, mode }));
-  };
+  }, []);
 
-  const handleLogout = async () => {
+  const handleLogout = useCallback(async () => {
     try {
       setLoading(true);
       await logoutAction();
@@ -97,7 +97,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   return (
     <UserContext.Provider

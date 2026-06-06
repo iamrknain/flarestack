@@ -14,11 +14,16 @@ export function AuthModal() {
   const searchParams = useSearchParams();
   const authParam = searchParams?.get("auth");
 
+  const [mounted, setMounted] = useState(false);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   // Trigger modal when query parameter 'auth' matches login or register
   useEffect(() => {
@@ -50,7 +55,7 @@ export function AuthModal() {
     }
   };
 
-  if (!isOpen) return null;
+  if (!mounted || !isOpen) return null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

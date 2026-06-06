@@ -5,16 +5,16 @@ import { useUserContext } from "~/context/UserContext";
 import { useEffect } from "react";
 
 export function ProtectedArea({ children }: { children: React.ReactNode }) {
-  const { user, loading, openLogin } = useUserContext();
+  const { user, loading, openLogin, authModal } = useUserContext();
   const pathname = usePathname();
 
   const isDashboardRoute = pathname?.startsWith("/dashboard") || false;
 
   useEffect(() => {
-    if (isDashboardRoute && !loading && !user) {
+    if (isDashboardRoute && !loading && !user && !authModal.isOpen) {
       openLogin(pathname);
     }
-  }, [isDashboardRoute, user, loading, pathname, openLogin]);
+  }, [isDashboardRoute, user, loading, pathname, openLogin, authModal.isOpen]);
 
   if (isDashboardRoute) {
     if (loading) {
