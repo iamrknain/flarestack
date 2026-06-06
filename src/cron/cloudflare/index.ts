@@ -4,14 +4,14 @@ import { getDb } from "~/db";
 import { zoneConfigs, cloudflareAccounts, addIpToListRules, underAttackRules, wafRules } from "~/db/schema/cloudflare";
 import { eq, and, inArray } from "drizzle-orm";
 import { CloudflareClient } from "~/lib/cloudflare";
-import { ActionLogger } from "~/lib/logger";
+import { ActivityLogger } from "~/lib/logger";
 import { runAddIpToListRule } from "./addIpToList";
 import { runUnderAttackModeRule } from "./underAttackMode";
 import { runWafAutomationRule } from "./wafRules";
 
 export async function runCloudflareCron(userId: string): Promise<void> {
     const db = getDb();
-    const logger = new ActionLogger(db);
+    const logger = new ActivityLogger(db);
 
     // 1. Load all active zones for this user
     const zones = await db

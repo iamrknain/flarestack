@@ -2,7 +2,7 @@
 
 import { debugLog } from "~/lib/debug";
 import { sendEmail } from "~/lib/email";
-import { ActionLogger } from "~/lib/logger";
+import { ActivityLogger } from "~/lib/logger";
 import { wafRuleOnEmail, wafRuleOffEmail, wafRuleNotFoundEmail } from "./emails";
 import { CloudflareClient } from "~/lib/cloudflare";
 import { wafRules, zoneConfigs } from "~/db/schema/cloudflare";
@@ -16,7 +16,7 @@ interface WafContext {
     zone: Zone;
     rule: WafRule;
     cf: CloudflareClient;
-    logger: ActionLogger;
+    logger: ActivityLogger;
 }
 
 export async function runWafAutomationRule({ zone, rule, cf, logger }: WafContext): Promise<void> {

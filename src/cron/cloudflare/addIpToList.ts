@@ -1,7 +1,7 @@
 "use server";
 
 import { debugLog } from "~/lib/debug";
-import { ActionLogger } from "~/lib/logger";
+import { ActivityLogger } from "~/lib/logger";
 import { ListCache } from "~/db/list-cache";
 import { CloudflareClient, type TopStatRow } from "~/lib/cloudflare";
 import { addIpToListRules, zoneConfigs } from "~/db/schema/cloudflare";
@@ -13,7 +13,7 @@ interface AddIpToListContext {
     zone: Zone;
     rule: AddIpToListRule;
     cf: CloudflareClient;
-    logger: ActionLogger;
+    logger: ActivityLogger;
     db: any;
     prefetchedIps?: { ip: string; count: number }[];
 }

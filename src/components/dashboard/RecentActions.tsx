@@ -101,7 +101,7 @@ export function RecentActions({
             {actions.length > 0 && (
                 <div className="px-6 py-3 border-t border-slate-50 bg-slate-50/30 flex justify-center">
                     <a
-                        href="/dashboard/logs"
+                        href="/dashboard/activity"
                         className="text-[10px] font-black text-indigo-600 hover:text-indigo-700 uppercase tracking-widest flex items-center gap-1.5 transition-colors group"
                     >
                         View Full History

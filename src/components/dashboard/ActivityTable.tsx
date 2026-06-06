@@ -1,4 +1,4 @@
-export function LogsTable({
+export function ActivityTable({
     logs,
     zones = [],
     projects = [],
@@ -53,7 +53,7 @@ export function LogsTable({
                     </svg>
                     <div className="absolute inset-0 bg-indigo-500/5 rounded-2xl animate-pulse" />
                 </div>
-                <h3 className="text-xl font-bold text-slate-900 uppercase tracking-tight italic">No logs found</h3>
+                <h3 className="text-xl font-bold text-slate-900 uppercase tracking-tight italic">No activity records found</h3>
                 <div className="mt-5 text-left bg-slate-50 border border-slate-200 rounded-xl p-5 max-w-sm w-full mx-auto">
                     <p className="text-[13px] font-bold text-slate-700 mb-3">Why am I seeing this?</p>
                     <ul className="text-xs text-slate-500 font-medium space-y-2.5">

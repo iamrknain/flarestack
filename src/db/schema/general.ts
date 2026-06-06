@@ -1,7 +1,7 @@
 import { pgTable, varchar, integer, text, timestamp } from 'drizzle-orm/pg-core';
 import { user } from './user';
 
-export const actionLogs = pgTable('action_logs', {
+export const activityLogs = pgTable('activity_logs', {
     id: varchar('id', { length: 255 }).primaryKey(),
     userId: varchar('user_id', { length: 255 }).notNull().references(() => user.id, { onDelete: 'cascade' }),
     provider: varchar('provider', { length: 50 }).notNull(), // 'cloudflare' | 'vercel' | etc.

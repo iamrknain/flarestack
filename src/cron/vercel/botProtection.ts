@@ -4,10 +4,10 @@ import { getDb } from "~/db";
 import { eq, and, gte, sql, desc } from "drizzle-orm";
 import { vercelTrafficStats, vercelBotProtectionRules, vercelProjects } from "~/db/schema/vercel";
 import { zoneConfigs, cloudflareAccounts } from "~/db/schema/cloudflare";
-import { actionLogs } from "~/db/schema/general";
+import { activityLogs } from "~/db/schema/general";
 import { debugLog } from "~/lib/debug";
 import { sendEmail } from "~/lib/email";
-import { ActionLogger } from "~/lib/logger";
+import { ActivityLogger } from "~/lib/logger";
 import { vercelBotProtectionOnEmail, vercelBotProtectionOffEmail } from "./emails";
 import type { VercelProjectWithCredentials } from "./underAttackMode";
 import { VercelClient } from "~/lib/vercel";
@@ -18,7 +18,7 @@ export type VercelBotProtectionRule = typeof vercelBotProtectionRules.$inferSele
 interface Ctx {
     project: VercelProjectWithCredentials;
     rule: VercelBotProtectionRule;
-    logger: ActionLogger;
+    logger: ActivityLogger;
 }
 
 export async function runVercelBotProtectionRule({ project, rule, logger }: Ctx): Promise<void> {
@@ -105,14 +105,14 @@ export async function runVercelBotProtectionRule({ project, rule, logger }: Ctx)
             // Check if we recently triggered VERCEL_BOT_PROTECTION_ON to avoid duplicate triggers
             const lastOnLog = await db
                 .select()
-                .from(actionLogs)
+                .from(activityLogs)
                 .where(
                     and(
-                        eq(actionLogs.ruleId, rule.id),
-                        eq(actionLogs.actionTaken, "VERCEL_BOT_PROTECTION_ON")
+                        eq(activityLogs.ruleId, rule.id),
+                        eq(activityLogs.actionTaken, "VERCEL_BOT_PROTECTION_ON")
                     )
                 )
-                .orderBy(desc(actionLogs.timestamp))
+                .orderBy(desc(activityLogs.timestamp))
                 .limit(1);
 
             if (lastOnLog.length > 0) {

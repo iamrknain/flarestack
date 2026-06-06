@@ -3,7 +3,7 @@
 import { headers } from "next/headers";
 import { getDb } from "~/db";
 import { getSession, requireAuth } from "~/lib/auth";
-import { vercelAccounts, vercelProjects, vercelUnderAttackRules, vercelBotProtectionRules, actionLogs, zoneConfigs } from "~/db/schema";
+import { vercelAccounts, vercelProjects, vercelUnderAttackRules, vercelBotProtectionRules, activityLogs, zoneConfigs } from "~/db/schema";
 import { and, eq, desc, sql } from "drizzle-orm";
 import { getRangeConditions } from "~/lib/filter";
 import { VercelClient } from "~/lib/vercel";
@@ -76,14 +76,14 @@ export async function getVercelDataAction(searchParams: any) {
         .orderBy(desc(vercelProjects.createdAt)),
       db
         .select()
-        .from(actionLogs)
-        .where(and(...conditions, eq(actionLogs.provider as any, "vercel")))
-        .orderBy(desc(actionLogs.timestamp))
+        .from(activityLogs)
+        .where(and(...conditions, eq(activityLogs.provider as any, "vercel")))
+        .orderBy(desc(activityLogs.timestamp))
         .limit(10),
       db
         .select({ count: sql<number>`count(*)` })
-        .from(actionLogs)
-        .where(and(...conditions, eq(actionLogs.provider as any, "vercel"))),
+        .from(activityLogs)
+        .where(and(...conditions, eq(activityLogs.provider as any, "vercel"))),
       db
         .select()
         .from(zoneConfigs)
@@ -222,10 +222,10 @@ export async function deleteVercelProject(projectId: string) {
   const userId = sessionData.user.id;
 
   await db.transaction(async (tx: any) => {
-    await tx.delete(actionLogs).where(and(
-      eq(actionLogs.provider as any, "vercel"),
-      eq(actionLogs.resourceId as any, projectId),
-      eq(actionLogs.userId as any, userId)
+    await tx.delete(activityLogs).where(and(
+      eq(activityLogs.provider as any, "vercel"),
+      eq(activityLogs.resourceId as any, projectId),
+      eq(activityLogs.userId as any, userId)
     ) as any);
     await tx.delete(vercelUnderAttackRules).where(and(eq(vercelUnderAttackRules.vercelProjectRef as any, projectId), eq(vercelUnderAttackRules.userId as any, userId)) as any);
     await tx.delete(vercelBotProtectionRules).where(and(eq(vercelBotProtectionRules.vercelProjectRef as any, projectId), eq(vercelBotProtectionRules.userId as any, userId)) as any);
@@ -365,12 +365,12 @@ export async function deleteVercelRule(ruleId: string, ruleType: string) {
   if (ruleId) {
     if (ruleType === "vercel_under_attack_mode") {
       await db.transaction(async (tx: any) => {
-        await tx.delete(actionLogs).where(eq(actionLogs.ruleId as any, ruleId) as any);
+        await tx.delete(activityLogs).where(eq(activityLogs.ruleId as any, ruleId) as any);
         await tx.delete(vercelUnderAttackRules).where(and(eq(vercelUnderAttackRules.id as any, ruleId), eq(vercelUnderAttackRules.userId as any, userId)) as any);
       });
     } else if (ruleType === "vercel_bot_protection") {
       await db.transaction(async (tx: any) => {
-        await tx.delete(actionLogs).where(eq(actionLogs.ruleId as any, ruleId) as any);
+        await tx.delete(activityLogs).where(eq(activityLogs.ruleId as any, ruleId) as any);
         await tx.delete(vercelBotProtectionRules).where(and(eq(vercelBotProtectionRules.id as any, ruleId), eq(vercelBotProtectionRules.userId as any, userId)) as any);
       });
     }

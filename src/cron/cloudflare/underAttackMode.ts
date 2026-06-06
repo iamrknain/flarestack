@@ -2,7 +2,7 @@
 
 import { debugLog } from "~/lib/debug";
 import { sendEmail } from "~/lib/email";
-import { ActionLogger } from "~/lib/logger";
+import { ActivityLogger } from "~/lib/logger";
 import { underAttackOnEmail, underAttackOffEmail } from "./emails";
 import { CloudflareClient } from "~/lib/cloudflare";
 import { underAttackRules, zoneConfigs } from "~/db/schema/cloudflare";
@@ -14,7 +14,7 @@ interface UnderAttackContext {
     zone: Zone;
     rule: UnderAttackRule;
     cf: CloudflareClient;
-    logger: ActionLogger;
+    logger: ActivityLogger;
 }
 
 export async function runUnderAttackModeRule({ zone, rule, cf, logger }: UnderAttackContext): Promise<void> {

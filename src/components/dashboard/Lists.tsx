@@ -221,6 +221,7 @@ export function Lists({
                 }
             } else {
                 setListItems(data);
+                fetchCacheStatus(selectedListId);
             }
         } catch (e) {
             console.error("Fetch items error:", e);
@@ -243,6 +244,7 @@ export function Lists({
                 console.error("Fetch items error:", data.error);
             } else {
                 setListItems(data);
+                fetchCacheStatus(selectedListId!);
             }
         } catch (e) {
             console.error("Fetch items error:", e);

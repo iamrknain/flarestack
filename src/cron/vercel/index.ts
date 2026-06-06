@@ -3,13 +3,13 @@
 import { getDb } from "~/db";
 import { vercelProjects, vercelAccounts, vercelUnderAttackRules, vercelBotProtectionRules, vercelTrafficStats } from "~/db/schema/vercel";
 import { eq, and, inArray, lt, sql } from "drizzle-orm";
-import { ActionLogger } from "~/lib/logger";
+import { ActivityLogger } from "~/lib/logger";
 import { runVercelUnderAttackRule, type VercelProjectWithCredentials } from "./underAttackMode";
 import { runVercelBotProtectionRule } from "./botProtection";
 
 export async function runVercelCron(userId: string): Promise<void> {
     const db = getDb();
-    const logger = new ActionLogger(db);
+    const logger = new ActivityLogger(db);
 
     // 1. Load active Vercel projects for this user
     const projects = await db

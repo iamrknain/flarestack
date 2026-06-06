@@ -4,10 +4,10 @@ import { getDb } from "~/db";
 import { eq, and, gte, sql, desc } from "drizzle-orm";
 import { vercelTrafficStats, vercelUnderAttackRules, vercelProjects, vercelAccounts } from "~/db/schema/vercel";
 import { zoneConfigs, cloudflareAccounts } from "~/db/schema/cloudflare";
-import { actionLogs } from "~/db/schema/general";
+import { activityLogs } from "~/db/schema/general";
 import { debugLog } from "~/lib/debug";
 import { sendEmail } from "~/lib/email";
-import { ActionLogger } from "~/lib/logger";
+import { ActivityLogger } from "~/lib/logger";
 import { vercelAttackOnEmail, vercelAttackOffEmail } from "./emails";
 import { VercelClient } from "~/lib/vercel";
 import { CloudflareClient } from "~/lib/cloudflare";
@@ -24,7 +24,7 @@ export interface VercelProjectWithCredentials extends VercelProject {
 interface Ctx {
     project: VercelProjectWithCredentials;
     rule: VercelUnderAttackRule;
-    logger: ActionLogger;
+    logger: ActivityLogger;
 }
 
 export async function runVercelUnderAttackRule({ project, rule, logger }: Ctx): Promise<void> {
@@ -97,14 +97,14 @@ export async function runVercelUnderAttackRule({ project, rule, logger }: Ctx): 
             // Check if we recently triggered VERCEL_ATTACK_MODE_ON to avoid duplicate triggers
             const lastOnLog = await db
                 .select()
-                .from(actionLogs)
+                .from(activityLogs)
                 .where(
                     and(
-                        eq(actionLogs.ruleId, rule.id),
-                        eq(actionLogs.actionTaken, "VERCEL_ATTACK_MODE_ON")
+                        eq(activityLogs.ruleId, rule.id),
+                        eq(activityLogs.actionTaken, "VERCEL_ATTACK_MODE_ON")
                     )
                 )
-                .orderBy(desc(actionLogs.timestamp))
+                .orderBy(desc(activityLogs.timestamp))
                 .limit(1);
 
             if (lastOnLog.length > 0) {

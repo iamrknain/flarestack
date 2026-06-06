@@ -1,13 +1,13 @@
 "use client";
 
 import { useState, useRef, useEffect, useMemo } from "react";
-import { LogsTable } from "./LogsTable";
+import { ActivityTable } from "./ActivityTable";
 import { DateRangePicker, type DateRange } from "~/components/DateRangePicker";
-import { deleteActionLogsAction } from "~/server/logs";
+import { deleteActivityLogsAction } from "~/server/activity";
 
 const inputCls = "block w-full rounded-md border-slate-200 text-sm focus:border-indigo-500 focus:ring-indigo-500 bg-slate-50 shadow-sm transition-colors text-slate-900";
 
-interface ActionLogsProps {
+interface ActivityLogsProps {
     zones: any[];
     projects?: any[];
     dateRange: DateRange;
@@ -27,7 +27,7 @@ interface ActionLogsProps {
     onSelectionChange?: (count: number) => void;
 }
 
-export function ActionLogs({
+export function ActivityLogs({
     zones,
     projects = [],
     dateRange,
@@ -45,7 +45,7 @@ export function ActionLogs({
     onDeepSearch,
     onClearDeepSearch,
     onSelectionChange
-}: ActionLogsProps) {
+}: ActivityLogsProps) {
     const isFetching = !!isLoading;
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
@@ -94,10 +94,10 @@ export function ActionLogs({
 
     const handleDeleteSelected = async () => {
         if (selectedIds.length === 0) return;
-        if (!confirm(`Are you sure you want to delete ${selectedIds.length} selected log(s)?`)) return;
+        if (!confirm(`Are you sure you want to delete ${selectedIds.length} selected activity record(s)?`)) return;
 
         try {
-            const res = await deleteActionLogsAction(selectedIds);
+            const res = await deleteActivityLogsAction(selectedIds);
             if (res && "error" in res && res.error) {
                 alert(res.error);
             } else {
@@ -105,7 +105,7 @@ export function ActionLogs({
                 onRefresh();
             }
         } catch (err: any) {
-            alert(err.message || "Failed to delete action logs");
+            alert(err.message || "Failed to delete activity records");
         }
     };
 
@@ -228,7 +228,7 @@ export function ActionLogs({
 
             <div className="w-full flex-1 flex flex-col">
                 <div className="flex-1 min-h-[500px] w-full">
-                    <LogsTable
+                    <ActivityTable
                         logs={displayedResults}
                         zones={zones}
                         projects={projects}

@@ -3,7 +3,7 @@
 import { headers } from "next/headers";
 import { getDb } from "~/db";
 import { requireAuth, getSession } from "~/lib/auth";
-import { cloudflareAccounts, zoneConfigs, addIpToListRules, underAttackRules, entityCache, actionLogs, wafRules } from "~/db/schema";
+import { cloudflareAccounts, zoneConfigs, addIpToListRules, underAttackRules, entityCache, activityLogs, wafRules } from "~/db/schema";
 import { eq, and, inArray, desc, sql, gte, lte } from "drizzle-orm";
 import { CloudflareClient } from "~/lib/cloudflare";
 import { ListCache } from "~/db/list-cache";
@@ -174,14 +174,14 @@ export async function getCloudflareDataAction(searchParams: any) {
         .orderBy(desc(zoneConfigs.createdAt)),
       db
         .select()
-        .from(actionLogs)
-        .where(and(...conditions, eq(actionLogs.provider as any, "cloudflare")))
-        .orderBy(desc(actionLogs.timestamp))
+        .from(activityLogs)
+        .where(and(...conditions, eq(activityLogs.provider as any, "cloudflare")))
+        .orderBy(desc(activityLogs.timestamp))
         .limit(10),
       db
         .select({ count: sql<number>`count(*)` })
-        .from(actionLogs)
-        .where(and(...conditions, eq(actionLogs.provider as any, "cloudflare"))),
+        .from(activityLogs)
+        .where(and(...conditions, eq(activityLogs.provider as any, "cloudflare"))),
       db.select().from(addIpToListRules).where(eq(addIpToListRules.userId as any, userId)).orderBy(desc(addIpToListRules.createdAt)),
       db.select().from(underAttackRules).where(eq(underAttackRules.userId as any, userId)).orderBy(desc(underAttackRules.createdAt)),
       db.select().from(wafRules).where(eq(wafRules.userId as any, userId)).orderBy(desc(wafRules.createdAt)),
@@ -540,10 +540,10 @@ export async function deleteZone(zoneId: string) {
   const cacheNamespaces = rulesInZone.map((r: any) => `cf_list:${r.cfListId}`);
 
   await db.transaction(async (tx: any) => {
-    await tx.delete(actionLogs).where(and(
-      eq(actionLogs.provider as any, "cloudflare"),
-      eq(actionLogs.resourceId as any, zoneId),
-      eq(actionLogs.userId as any, userId)
+    await tx.delete(activityLogs).where(and(
+      eq(activityLogs.provider as any, "cloudflare"),
+      eq(activityLogs.resourceId as any, zoneId),
+      eq(activityLogs.userId as any, userId)
     ) as any);
     
     await tx.delete(addIpToListRules).where(and(eq(addIpToListRules.zoneConfigId as any, zoneId), eq(addIpToListRules.userId as any, userId)) as any);
@@ -663,7 +663,7 @@ export async function deleteCloudflareRule(ruleId: string, ruleType: string) {
     if (ruleType === "add_ip_to_list") {
       const [ruleRow] = await db.select().from(addIpToListRules).where(and(eq(addIpToListRules.id as any, ruleId), eq(addIpToListRules.userId as any, userId)) as any);
       await db.transaction(async (tx: any) => {
-        await tx.delete(actionLogs).where(eq(actionLogs.ruleId as any, ruleId) as any);
+        await tx.delete(activityLogs).where(eq(activityLogs.ruleId as any, ruleId) as any);
         await tx.delete(addIpToListRules).where(and(eq(addIpToListRules.id as any, ruleId), eq(addIpToListRules.userId as any, userId)) as any);
         if (ruleRow?.cfListId) {
           await tx.delete(entityCache).where(eq(entityCache.namespace as any, `cf_list:${ruleRow.cfListId}`) as any);
@@ -671,12 +671,12 @@ export async function deleteCloudflareRule(ruleId: string, ruleType: string) {
       });
     } else if (ruleType === "under_attack_mode") {
       await db.transaction(async (tx: any) => {
-        await tx.delete(actionLogs).where(eq(actionLogs.ruleId as any, ruleId) as any);
+        await tx.delete(activityLogs).where(eq(activityLogs.ruleId as any, ruleId) as any);
         await tx.delete(underAttackRules).where(and(eq(underAttackRules.id as any, ruleId), eq(underAttackRules.userId as any, userId)) as any);
       });
     } else if (ruleType === "waf_rule") {
       await db.transaction(async (tx: any) => {
-        await tx.delete(actionLogs).where(eq(actionLogs.ruleId as any, ruleId) as any);
+        await tx.delete(activityLogs).where(eq(activityLogs.ruleId as any, ruleId) as any);
         await tx.delete(wafRules).where(and(eq(wafRules.id as any, ruleId), eq(wafRules.userId as any, userId)) as any);
       });
     }

@@ -1,7 +1,7 @@
-import { actionLogs } from '~/db/schema/general';
+import { activityLogs } from '~/db/schema/general';
 import { debugLog } from './debug';
 
-export interface ActionLogParams {
+export interface ActivityLogParams {
     userId: string;
     provider: string; // 'cloudflare' | 'vercel'
     resourceId?: string | null;
@@ -14,20 +14,20 @@ export interface ActionLogParams {
     timestamp?: Date;
 }
 
-export class ActionLogger {
+export class ActivityLogger {
     constructor(private db: any) { }
 
     /**
-     * Records a single action log entry in the database.
+     * Records a single activity log entry in the database.
      */
-    async logAction(params: ActionLogParams): Promise<void> {
+    async logAction(params: ActivityLogParams): Promise<void> {
         await this.logActions([params]);
     }
 
     /**
-     * Batch-inserts multiple action log entries in a single DB write.
+     * Batch-inserts multiple activity log entries in a single DB write.
      */
-    async logActions(entries: ActionLogParams[]): Promise<void> {
+    async logActions(entries: ActivityLogParams[]): Promise<void> {
         if (entries.length === 0) return;
 
         const now = new Date();
@@ -45,11 +45,11 @@ export class ActionLogger {
             timestamp: p.timestamp ?? now,
         }));
 
-        await this.db.insert(actionLogs).values(rows);
+        await this.db.insert(activityLogs).values(rows);
 
         const preview = entries.length > 10
             ? `${entries.slice(0, 10).map(e => e.targetValue).join(', ')} … (+${entries.length - 10} more)`
             : entries.map(e => e.targetValue).join(', ');
-        debugLog(`  > Logged ${entries.length} action(s): ${preview}`);
+        debugLog(`  > Logged ${entries.length} activity record(s): ${preview}`);
     }
 }

@@ -2,13 +2,13 @@
 
 import { getDb } from "~/db";
 import { requireAuth } from "~/lib/auth";
-import { actionLogs, zoneConfigs, vercelProjects } from "~/db/schema";
+import { activityLogs, zoneConfigs, vercelProjects } from "~/db/schema";
 import { desc, eq, inArray, and, gte, lte, sql } from "drizzle-orm";
 import { headers } from "next/headers";
 import { getSession } from "~/lib/auth";
 import { getRangeConditions } from "~/lib/filter";
 
-export async function getLogsAction(params: {
+export async function getActivityLogsAction(params: {
   zoneId?: string;
   projectId?: string;
   resourceId?: string;
@@ -24,49 +24,48 @@ export async function getLogsAction(params: {
     const limit = Math.min(params.limit || 100, 1000);
     const windowSeconds = params.windowSeconds || 3600;
 
-    const conditions = [eq(actionLogs.userId, user.id)];
+    const conditions = [eq(activityLogs.userId, user.id)];
 
     if (params.zoneId || (params.provider === "cloudflare" && params.resourceId)) {
       conditions.push(
-        eq(actionLogs.provider, "cloudflare"),
-        eq(actionLogs.resourceId, (params.zoneId || params.resourceId)!)
+        eq(activityLogs.provider, "cloudflare"),
+        eq(activityLogs.resourceId, (params.zoneId || params.resourceId)!)
       );
     } else if (params.projectId || (params.provider === "vercel" && params.resourceId)) {
       conditions.push(
-        eq(actionLogs.provider, "vercel"),
-        eq(actionLogs.resourceId, (params.projectId || params.resourceId)!)
+        eq(activityLogs.provider, "vercel"),
+        eq(activityLogs.resourceId, (params.projectId || params.resourceId)!)
       );
     } else if (params.resourceId && params.provider) {
       conditions.push(
-        eq(actionLogs.provider, params.provider),
-        eq(actionLogs.resourceId, params.resourceId)
+        eq(activityLogs.provider, params.provider),
+        eq(activityLogs.resourceId, params.resourceId)
       );
     }
 
     if (params.actions) {
       const actionArray = params.actions.split(",").map(a => a.trim()).filter(Boolean);
       if (actionArray.length > 0) {
-        conditions.push(inArray(actionLogs.actionTaken, actionArray));
+        conditions.push(inArray(activityLogs.actionTaken, actionArray));
       }
     }
 
     const cutoffTimeMs = Date.now() - (windowSeconds * 1000);
-    conditions.push(gte(actionLogs.timestamp, new Date(cutoffTimeMs)));
+    conditions.push(gte(activityLogs.timestamp, new Date(cutoffTimeMs)));
 
     const logs = await db.select()
-      .from(actionLogs)
+      .from(activityLogs)
       .where(and(...conditions))
-      .orderBy(desc(actionLogs.timestamp))
+      .orderBy(desc(activityLogs.timestamp))
       .limit(limit);
 
     return logs;
   } catch (error: any) {
-    return { error: error.message || "Failed to fetch logs" };
+    return { error: error.message || "Failed to fetch activity logs" };
   }
 }
 
-
-export async function getLogsDataAction(searchParams: any) {
+export async function getActivityDataAction(searchParams: any) {
   const reqHeaders = await headers();
   const cookieHeader = reqHeaders.get("cookie") || undefined;
   const sessionData = await getSession(cookieHeader);
@@ -95,9 +94,9 @@ export async function getLogsDataAction(searchParams: any) {
         .orderBy(desc(vercelProjects.createdAt)),
       db
         .select()
-        .from(actionLogs)
+        .from(activityLogs)
         .where(and(...conditions))
-        .orderBy(desc(actionLogs.timestamp))
+        .orderBy(desc(activityLogs.timestamp))
         .limit(queryLimit),
     ]);
 
@@ -111,11 +110,11 @@ export async function getLogsDataAction(searchParams: any) {
     };
   } catch (err) {
     console.error(err);
-    return { error: "Failed to fetch data" };
+    return { error: "Failed to fetch activity data" };
   }
 }
 
-export async function deleteActionLogsAction(logIds: string[]) {
+export async function deleteActivityLogsAction(logIds: string[]) {
   const reqHeaders = await headers();
   const cookieHeader = reqHeaders.get("cookie") || undefined;
   const sessionData = await getSession(cookieHeader);
@@ -129,16 +128,15 @@ export async function deleteActionLogsAction(logIds: string[]) {
     const userId = sessionData.user.id;
     const db = getDb();
     
-    await db.delete(actionLogs)
+    await db.delete(activityLogs)
       .where(and(
-        eq(actionLogs.userId, userId),
-        inArray(actionLogs.id, logIds)
+        eq(activityLogs.userId, userId),
+        inArray(activityLogs.id, logIds)
       ));
     
     return { success: true };
   } catch (err: any) {
     console.error(err);
-    return { error: err.message || "Failed to delete action logs" };
+    return { error: err.message || "Failed to delete activity logs" };
   }
 }
-

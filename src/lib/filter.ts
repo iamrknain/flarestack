@@ -1,5 +1,5 @@
 import { eq, gte, lte, or, ilike } from "drizzle-orm";
-import { actionLogs } from "~/db/schema";
+import { activityLogs } from "~/db/schema";
 
 export function getRangeConditions(userId: string, searchParams: { [key: string]: string | string[] | undefined }) {
   const rangeType = (searchParams.type as string) || "relative";
@@ -10,17 +10,17 @@ export function getRangeConditions(userId: string, searchParams: { [key: string]
   const projectIdFilter = searchParams.projectId as string;
   const q = searchParams.q as string;
 
-  const conditions = [eq(actionLogs.userId as any, userId)];
+  const conditions = [eq(activityLogs.userId as any, userId)];
 
   if (zoneIdFilter) {
     conditions.push(
-      eq(actionLogs.provider as any, "cloudflare"),
-      eq(actionLogs.resourceId as any, zoneIdFilter)
+      eq(activityLogs.provider as any, "cloudflare"),
+      eq(activityLogs.resourceId as any, zoneIdFilter)
     );
   } else if (projectIdFilter) {
     conditions.push(
-      eq(actionLogs.provider as any, "vercel"),
-      eq(actionLogs.resourceId as any, projectIdFilter)
+      eq(activityLogs.provider as any, "vercel"),
+      eq(activityLogs.resourceId as any, projectIdFilter)
     );
   }
 
@@ -28,13 +28,13 @@ export function getRangeConditions(userId: string, searchParams: { [key: string]
     const pattern = `%${q.trim()}%`;
     conditions.push(
       or(
-        ilike(actionLogs.provider, pattern),
-        ilike(actionLogs.resourceId, pattern),
-        ilike(actionLogs.ruleId, pattern),
-        ilike(actionLogs.actionTaken, pattern),
-        ilike(actionLogs.targetType, pattern),
-        ilike(actionLogs.targetValue, pattern),
-        ilike(actionLogs.metadata, pattern)
+        ilike(activityLogs.provider, pattern),
+        ilike(activityLogs.resourceId, pattern),
+        ilike(activityLogs.ruleId, pattern),
+        ilike(activityLogs.actionTaken, pattern),
+        ilike(activityLogs.targetType, pattern),
+        ilike(activityLogs.targetValue, pattern),
+        ilike(activityLogs.metadata, pattern)
       ) as any
     );
   }
@@ -46,10 +46,10 @@ export function getRangeConditions(userId: string, searchParams: { [key: string]
     if (unit === "m") ms = num * 60000;
     else if (unit === "h") ms = num * 3600000;
     else if (unit === "d") ms = num * 86400000;
-    conditions.push(gte(actionLogs.timestamp as any, new Date(Date.now() - ms)));
+    conditions.push(gte(activityLogs.timestamp as any, new Date(Date.now() - ms)));
   } else if (rangeType === "absolute" && startStr) {
-    conditions.push(gte(actionLogs.timestamp as any, new Date(startStr)));
-    if (endStr) conditions.push(lte(actionLogs.timestamp as any, new Date(endStr)));
+    conditions.push(gte(activityLogs.timestamp as any, new Date(startStr)));
+    if (endStr) conditions.push(lte(activityLogs.timestamp as any, new Date(endStr)));
   }
 
   return conditions;
