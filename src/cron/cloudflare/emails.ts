@@ -2,8 +2,10 @@
 
 function row(label: string, value: string) {
     return `<tr>
-      <td style="padding:8px 0;color:#64748b;font-size:13px;font-weight:600;text-transform:uppercase;">${label}</td>
-      <td style="padding:8px 0;text-align:right;color:#0f172a;font-weight:700;font-size:14px;">${value}</td>
+      <td style="padding:8px 0;color:#64748b;font-size:13px;font-weight:600;text-transform:uppercase;vertical-align:middle;">${label}</td>
+      <td style="padding:8px 0;text-align:right;color:#0f172a;font-weight:700;font-size:14px;vertical-align:middle;">
+        <code style="font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace; background-color:#f1f5f9; padding:3px 6px; border-radius:4px; font-size:12px; color:#0f172a; word-break:break-all; user-select:all; border:1px solid #e2e8f0; display:inline-block;">${value}</code>
+      </td>
     </tr>`;
 }
 
@@ -35,7 +37,7 @@ function emailShell(headerBg: string, title: string, subtitle: string, tableRows
       </div>
     </div>
   </div>
-</body></html>`;
+ </body></html>`;
 }
 
 // ── Under Attack Mode templates ────────────────────────────────────────────

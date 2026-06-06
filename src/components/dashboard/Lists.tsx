@@ -280,7 +280,7 @@ export function Lists({
 
         if (!dateRange.live) return;
 
-        const intervalMs = (dateRange.refreshInterval || 10) * 1000;
+        const intervalMs = (dateRange.refreshInterval || 15) * 1000;
         const timer = setInterval(() => {
             if (!itemsLoading && !listsLoading && selectedItemsSizeRef.current === 0) {
                 handleFetchItems();

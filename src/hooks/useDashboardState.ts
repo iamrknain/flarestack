@@ -4,7 +4,7 @@ import type { DateRange } from "~/components/DateRangePicker";
 export function useDashboardState(
   defaultLimit: number = 10,
   pageKey?: string,
-  defaultDateRange: DateRange = { type: "relative", relativeValue: "30m", live: false, refreshInterval: 10 }
+  defaultDateRange: DateRange = { type: "relative", relativeValue: "30m", live: false, refreshInterval: 15 }
 ) {
   const [isPaused, setIsPaused] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -77,7 +77,7 @@ export function useDashboardState(
   useEffect(() => {
     if (!dateRange.live) return;
 
-    const intervalMs = (dateRange.refreshInterval || 10) * 1000;
+    const intervalMs = (dateRange.refreshInterval || 15) * 1000;
     const timer = setInterval(() => {
       if (!isPaused) {
         setIsLoading(true);

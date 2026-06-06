@@ -184,7 +184,7 @@ export function DateRangePicker({
                                     <div className="flex items-center justify-between px-3 py-2">
                                         <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">{liveLabel}</span>
                                         <button
-                                            onClick={() => onChange({ ...value, live: !value.live, refreshInterval: value.refreshInterval || 10 })}
+                                            onClick={() => onChange({ ...value, live: !value.live, refreshInterval: value.refreshInterval || 15 })}
                                             className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${value.live ? "bg-emerald-500" : "bg-slate-200"}`}
                                         >
                                             <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${value.live ? "translate-x-5" : "translate-x-0.5"}`} />
@@ -302,7 +302,7 @@ export function DateRangePicker({
                                     <div className="flex items-center justify-between">
                                         <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">{liveLabel}</span>
                                         <button
-                                            onClick={() => onChange({ ...value, live: !value.live, refreshInterval: value.refreshInterval || 10 })}
+                                            onClick={() => onChange({ ...value, live: !value.live, refreshInterval: value.refreshInterval || 15 })}
                                             className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${value.live ? "bg-emerald-500" : "bg-slate-200"}`}
                                         >
                                             <span className={`inline-block h-4.5 w-4.5 transform rounded-full bg-white transition-transform ${value.live ? "translate-x-6" : "translate-x-0.5"}`} />

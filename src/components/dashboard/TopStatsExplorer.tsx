@@ -165,7 +165,7 @@ export function TopStatsExplorer({
 
         if (!dateRange.live) return;
 
-        const intervalMs = (dateRange.refreshInterval || 10) * 1000;
+        const intervalMs = (dateRange.refreshInterval || 15) * 1000;
         const timer = setInterval(() => {
             // Pause auto-refresh as long as the user has items selected for an action
             if (!isFetching && selectedItemsSizeRef.current === 0) {
