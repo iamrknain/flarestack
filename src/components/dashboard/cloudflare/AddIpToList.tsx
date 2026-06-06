@@ -44,7 +44,7 @@ export function AddIpToList({
         const zone = zones.find(z => z.id === zoneId);
         if (zone) {
             setIsLoadingLists(true);
-            getListsAction(zone.cfAccountRef)
+            getListsAction(zone.cfAccountRef, debouncedToken)
                 .then(data => {
                     if (Array.isArray(data)) {
                         setDiscoveredLists(data);
@@ -53,7 +53,7 @@ export function AddIpToList({
                 .catch(err => console.error("Fetch lists error:", err))
                 .finally(() => setIsLoadingLists(false));
         }
-    }, [zoneId, zones]);
+    }, [zoneId, zones, debouncedToken]);
 
     const selectedListName = discoveredLists.find(l => l.id === selectedListId)?.name || rule?.cfListName || "";
 

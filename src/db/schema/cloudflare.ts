@@ -56,6 +56,25 @@ export const underAttackRules = pgTable('under_attack_rules', {
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
 
+export const wafRules = pgTable('waf_rules', {
+    id: varchar('id', { length: 255 }).primaryKey(),
+    name: varchar('name', { length: 255 }).notNull().default('WAF Mitigation Rule'),
+    zoneConfigId: varchar('zone_config_id', { length: 255 }).notNull().references(() => zoneConfigs.id, { onDelete: 'cascade' }),
+    userId: varchar('user_id', { length: 255 }).notNull().references(() => user.id, { onDelete: 'cascade' }),
+    cfRulesetId: varchar('cf_ruleset_id', { length: 255 }).notNull(),
+    cfRuleId: varchar('cf_rule_id', { length: 255 }).notNull(),
+    cfRuleName: varchar('cf_rule_name', { length: 255 }).notNull(),
+    rateLimitThreshold: integer('rate_limit_threshold').notNull().default(10000),
+    windowSeconds: integer('window_seconds').notNull().default(300),
+    autoOff: boolean('auto_off').notNull().default(false),
+    offThreshold: integer('off_threshold'),
+    sendNotification: boolean('send_notification').notNull().default(false),
+    notifyEmails: text('notify_emails'),
+    isActive: boolean('is_active').notNull().default(true),
+    cfApiTokenOverride: text('cf_api_token_override'),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
 
 export const entityCache = pgTable('entity_cache', {
     namespace: varchar('namespace', { length: 255 }).notNull(),

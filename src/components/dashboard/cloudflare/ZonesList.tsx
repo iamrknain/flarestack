@@ -145,6 +145,8 @@ export function ZonesList({ zones, accounts, rules, onAddZone, onAddRule, onEdit
                                             Explore
                                         </a>
 
+
+
                                         <button
                                             onClick={() => onAddRule(zone.id)}
                                             disabled={!zone.isActive}
@@ -295,6 +297,37 @@ function RuleDetails({ rule }: { rule: any }) {
                     <span className="text-[9px] uppercase font-black tracking-wider text-rose-500/80 leading-none mb-0.5">Under Attack</span>
                     <span className="text-sm font-black text-slate-900 truncate leading-tight" title={rule.name}>{rule.name}</span>
                 </div>
+                <div className="flex items-center gap-1 bg-rose-50 px-2 py-0.5 rounded-md border border-rose-100">
+                    <span className="text-[11px] text-rose-700 font-black">{rule.rateLimitThreshold?.toLocaleString()}</span>
+                    <span className="text-[10px] text-rose-600/70 font-bold uppercase">On Trigger</span>
+                </div>
+                {rule.autoOff ? (
+                    <div className="flex items-center gap-1 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-100">
+                        <span className="text-[11px] text-emerald-700 font-black">{rule.offThreshold?.toLocaleString()}</span>
+                        <span className="text-[10px] text-emerald-600/70 font-bold uppercase">Off Trigger</span>
+                    </div>
+                ) : (
+                    <span className="text-[10px] text-slate-500 font-bold uppercase">Manual Recovery</span>
+                )}
+                <span className="text-[10px] text-slate-400 font-bold uppercase italic">{rule.windowSeconds}s Window</span>
+                {rule.sendNotification && (
+                    <div className="flex items-center gap-1 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-100" title={rule.notifyEmails || "No emails configured"}>
+                        <span className="text-[11px] text-blue-700 font-black">
+                            {rule.notifyEmails ? (rule.notifyEmails.length > 20 ? rule.notifyEmails.slice(0, 20) + "..." : rule.notifyEmails) : "Enabled"}
+                        </span>
+                    </div>
+                )}
+            </div>
+        );
+    }
+    if (rule.type === "waf_rule") {
+        return (
+            <div className="flex items-center gap-3 flex-1 min-w-0 flex-wrap sm:flex-nowrap">
+                <div className="flex flex-col min-w-[120px] max-w-[180px] shrink-0">
+                    <span className="text-[9px] uppercase font-black tracking-wider text-indigo-500/80 leading-none mb-0.5">WAF Automation</span>
+                    <span className="text-sm font-black text-slate-900 truncate leading-tight" title={rule.name}>{rule.name}</span>
+                </div>
+                <span className="text-[10px] font-bold text-indigo-600 truncate shrink-0 max-w-[150px]" title={rule.cfRuleName}>{rule.cfRuleName}</span>
                 <div className="flex items-center gap-1 bg-rose-50 px-2 py-0.5 rounded-md border border-rose-100">
                     <span className="text-[11px] text-rose-700 font-black">{rule.rateLimitThreshold?.toLocaleString()}</span>
                     <span className="text-[10px] text-rose-600/70 font-bold uppercase">On Trigger</span>

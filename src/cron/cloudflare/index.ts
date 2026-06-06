@@ -1,13 +1,14 @@
 "use server";
 
 import { getDb } from "~/db";
-import { zoneConfigs, cloudflareAccounts, addIpToListRules, underAttackRules } from "~/db/schema/cloudflare";
+import { zoneConfigs, cloudflareAccounts, addIpToListRules, underAttackRules, wafRules } from "~/db/schema/cloudflare";
 import { eq, and, inArray } from "drizzle-orm";
 import { CloudflareClient } from "~/lib/cloudflare";
 import { ActionLogger } from "~/lib/logger";
 import { CacheStore } from "~/db/cache";
 import { runAddIpToListRule } from "./addIpToList";
 import { runUnderAttackModeRule } from "./underAttackMode";
+import { runWafAutomationRule } from "./wafRules";
 
 export async function runCloudflareCron(userId: string): Promise<void> {
     const db = getDb();
@@ -35,12 +36,14 @@ export async function runCloudflareCron(userId: string): Promise<void> {
 
     const zoneIds = zones.map((z) => z.id);
 
-    // 3. Load all active rules in one batch (two queries, one per rule table)
-    const [ipRules, attackRules] = await Promise.all([
+    // 3. Load all active rules in one batch
+    const [ipRules, attackRules, activeWafRules] = await Promise.all([
         db.select().from(addIpToListRules)
             .where(and(inArray(addIpToListRules.zoneConfigId, zoneIds), eq(addIpToListRules.isActive, true))),
         db.select().from(underAttackRules)
             .where(and(inArray(underAttackRules.zoneConfigId, zoneIds), eq(underAttackRules.isActive, true))),
+        db.select().from(wafRules)
+            .where(and(inArray(wafRules.zoneConfigId, zoneIds), eq(wafRules.isActive, true))),
     ]);
 
     const minutesSinceEpoch = Math.floor(Date.now() / (60 * 1000));
@@ -57,6 +60,7 @@ export async function runCloudflareCron(userId: string): Promise<void> {
 
             const zoneIpRules = ipRules.filter((r) => r.zoneConfigId === zone.id);
             const zoneAttackRules = attackRules.filter((r) => r.zoneConfigId === zone.id);
+            const zoneWafRules = activeWafRules.filter((r) => r.zoneConfigId === zone.id);
 
             // Execute ip rules
             for (const rule of zoneIpRules) {
@@ -81,6 +85,19 @@ export async function runCloudflareCron(userId: string): Promise<void> {
                     await runUnderAttackModeRule({ zone, rule, cf: ruleCf, logger });
                 } catch (err) {
                     console.error(`[cron/cloudflare] Rule ${rule.id} failed:`, err);
+                }
+            }
+
+            // Execute WAF rules
+            for (const rule of zoneWafRules) {
+                if (!isDue(rule.windowSeconds ?? 300, minutesSinceEpoch)) continue;
+                try {
+                    const ruleCf = rule.cfApiTokenOverride && rule.cfApiTokenOverride.trim().length > 0
+                        ? new CloudflareClient(account.cfAccountId, rule.cfApiTokenOverride.trim())
+                        : cf;
+                    await runWafAutomationRule({ zone, rule, cf: ruleCf, logger });
+                } catch (err) {
+                    console.error(`[cron/cloudflare] WAF Rule ${rule.id} failed:`, err);
                 }
             }
         })

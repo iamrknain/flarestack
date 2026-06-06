@@ -40,6 +40,20 @@ const CF_RULES: RuleOption[] = [
         ),
     },
     {
+        type: "waf_rule",
+        name: "WAF Rule Mitigation",
+        description: "Automatically enables/disables an existing Cloudflare Custom WAF Rule based on request traffic volume.",
+        enabled: true,
+        tag: "Available",
+        tagClasses: "bg-emerald-100 text-emerald-700 border-emerald-200",
+        icon: (
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-indigo-600">
+                <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+            </svg>
+        ),
+    },
+    {
         type: "js_challenge",
         name: "Dynamic JS Challenge",
         description: "Issues a JS Challenge to requests matching specific pattern-based signatures.",

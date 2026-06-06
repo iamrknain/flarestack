@@ -11,6 +11,7 @@ import { AddZone } from "~/components/dashboard/cloudflare/AddZone";
 import { RuleSelector } from "~/components/dashboard/cloudflare/RuleSelector";
 import { AddIpToList } from "~/components/dashboard/cloudflare/AddIpToList";
 import { UnderAttackMode } from "~/components/dashboard/cloudflare/UnderAttackMode";
+import { AddWafRule } from "~/components/dashboard/cloudflare/AddWafRule";
 import { getCloudflareDataAction } from "~/server/cloudflare";
 import { useDashboardState } from "~/hooks/useDashboardState";
 
@@ -83,12 +84,13 @@ export default function CloudflarePage() {
     const totalBlocks = data?.totalBlocks || 0;
 
     const cfActions = recentActions.filter(a => a.provider === "cloudflare");
-    const cfRuleTypes = ["add_ip_to_list", "under_attack_mode", "js_challenge", "block_country"];
+    const cfRuleTypes = ["add_ip_to_list", "under_attack_mode", "waf_rule", "js_challenge", "block_country"];
     const cfActiveRules = rules.filter(r => cfRuleTypes.includes(r.type) && r.isActive);
 
     const CF_RULE_ADD_COMPONENTS: Record<string, React.ComponentType<any>> = {
         add_ip_to_list: AddIpToList,
         under_attack_mode: UnderAttackMode,
+        waf_rule: AddWafRule,
     };
     const RuleComponent = selectedRuleType ? CF_RULE_ADD_COMPONENTS[selectedRuleType] : null;
 
@@ -270,6 +272,18 @@ export default function CloudflarePage() {
                     />
                 ) : editingRule.type === "under_attack_mode" ? (
                     <UnderAttackMode
+                        zoneId={editingRule.zoneConfigId}
+                        rule={editingRule}
+                        onClose={() => {
+                            setEditingRule(null);
+                            loadData();
+                        }}
+                        zones={zones}
+                        accounts={accounts}
+                        isSubmitting={false}
+                    />
+                ) : editingRule.type === "waf_rule" ? (
+                    <AddWafRule
                         zoneId={editingRule.zoneConfigId}
                         rule={editingRule}
                         onClose={() => {

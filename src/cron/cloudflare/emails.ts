@@ -66,3 +66,47 @@ export function underAttackOffEmail(zone: string, total: number, threshold: numb
         `Under Attack Mode has been disabled and security level restored to <strong>${level}</strong>.`,
     );
 }
+
+// ── WAF Automation Rule templates ──────────────────────────────────────────
+
+export function wafRuleOnEmail(zone: string, ruleName: string, wafRuleName: string, total: number, threshold: number, window: number) {
+    return emailShell(
+        "linear-gradient(135deg,#6366f1,#4338ca)",
+        "Security Alert: WAF Custom Rule Enabled",
+        "Zone traffic has exceeded automation thresholds.",
+        row("Zone", zone) +
+        row("Automation Rule", ruleName) +
+        row("Target WAF Rule", wafRuleName) +
+        row("Traffic Window", `${window}s`) +
+        row("Current Traffic", `${total.toLocaleString()} reqs`) +
+        row("Trigger Limit", `${threshold.toLocaleString()} reqs`),
+        `Cloudflare Custom WAF Rule <strong>${wafRuleName}</strong> has been programmatically enabled to protect your origin.`,
+    );
+}
+
+export function wafRuleOffEmail(zone: string, ruleName: string, wafRuleName: string, total: number, threshold: number, window: number) {
+    return emailShell(
+        "linear-gradient(135deg,#10b981,#047857)",
+        "Security Resolved: WAF Custom Rule Disabled",
+        "Zone traffic has subsided below recovery thresholds.",
+        row("Zone", zone) +
+        row("Automation Rule", ruleName) +
+        row("Target WAF Rule", wafRuleName) +
+        row("Traffic Window", `${window}s`) +
+        row("Current Traffic", `${total.toLocaleString()} reqs`) +
+        row("Recovery Limit", `${threshold.toLocaleString()} reqs`),
+        `Cloudflare Custom WAF Rule <strong>${wafRuleName}</strong> has been programmatically disabled.`,
+    );
+}
+
+export function wafRuleNotFoundEmail(zone: string, ruleName: string, wafRuleName: string) {
+    return emailShell(
+        "linear-gradient(135deg,#f59e0b,#d97706)",
+        "Security Alert: WAF Rule Auto-Disabled",
+        "Target Custom WAF Rule was not found on Cloudflare.",
+        row("Zone", zone) +
+        row("Automation Rule", ruleName) +
+        row("Target WAF Rule", wafRuleName),
+        `The automated WAF rule has been auto-disabled in FlareStack because target rule <strong>${wafRuleName}</strong> was deleted or could not be found on Cloudflare.`,
+    );
+}

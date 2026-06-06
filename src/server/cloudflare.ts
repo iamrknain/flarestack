@@ -3,14 +3,14 @@
 import { headers } from "next/headers";
 import { getDb } from "~/db";
 import { requireAuth, getSession } from "~/lib/auth";
-import { cloudflareAccounts, zoneConfigs, addIpToListRules, underAttackRules, entityCache, actionLogs } from "~/db/schema";
+import { cloudflareAccounts, zoneConfigs, addIpToListRules, underAttackRules, entityCache, actionLogs, wafRules } from "~/db/schema";
 import { eq, and, inArray, desc, sql, gte, lte } from "drizzle-orm";
 import { CloudflareClient, type ListItem } from "~/lib/cloudflare";
 import { CacheStore } from "~/db/cache";
 
 import { getRangeConditions } from "~/lib/filter";
 
-async function getClient(accountRef: string) {
+async function getClient(accountRef: string, apiTokenOverride?: string) {
   const user = await requireAuth();
   const db = getDb();
   
@@ -23,8 +23,12 @@ async function getClient(accountRef: string) {
     throw new Error("Cloudflare Account not found");
   }
   
+  const apiToken = apiTokenOverride && apiTokenOverride.trim().length > 0
+    ? apiTokenOverride.trim()
+    : account.cfApiToken;
+  
   return {
-    cf: new CloudflareClient(account.cfAccountId, account.cfApiToken),
+    cf: new CloudflareClient(account.cfAccountId, apiToken),
     db,
   };
 }
@@ -38,9 +42,9 @@ export async function getZonesAction(accountRef: string) {
   }
 }
 
-export async function getListsAction(accountRef: string) {
+export async function getListsAction(accountRef: string, apiTokenOverride?: string) {
   try {
-    const { cf } = await getClient(accountRef);
+    const { cf } = await getClient(accountRef, apiTokenOverride);
     return await cf.lists.getLists();
   } catch (error: any) {
     return { error: error.message || "Failed to fetch lists" };
@@ -148,12 +152,14 @@ export async function getCloudflareDataAction(searchParams: any) {
         .where(and(...conditions, eq(actionLogs.provider as any, "cloudflare"))),
       db.select().from(addIpToListRules).where(eq(addIpToListRules.userId as any, userId)).orderBy(desc(addIpToListRules.createdAt)),
       db.select().from(underAttackRules).where(eq(underAttackRules.userId as any, userId)).orderBy(desc(underAttackRules.createdAt)),
+      db.select().from(wafRules).where(eq(wafRules.userId as any, userId)).orderBy(desc(wafRules.createdAt)),
     ]);
 
     const totalBlocks = (countResult[0]?.count ?? 0) as number;
     const rules = [
       ...(ruleResults[0] as any[]).map((r) => ({ ...r, type: "add_ip_to_list" })),
       ...(ruleResults[1] as any[]).map((r) => ({ ...r, type: "under_attack_mode" })),
+      ...(ruleResults[2] as any[]).map((r) => ({ ...r, type: "waf_rule" })),
     ];
 
     return {
@@ -510,6 +516,7 @@ export async function deleteZone(zoneId: string) {
     
     await tx.delete(addIpToListRules).where(and(eq(addIpToListRules.zoneConfigId as any, zoneId), eq(addIpToListRules.userId as any, userId)) as any);
       await tx.delete(underAttackRules).where(and(eq(underAttackRules.zoneConfigId as any, zoneId), eq(underAttackRules.userId as any, userId)) as any);
+      await tx.delete(wafRules).where(and(eq(wafRules.zoneConfigId as any, zoneId), eq(wafRules.userId as any, userId)) as any);
 
     if (cacheNamespaces.length > 0) {
       await tx.delete(entityCache).where(inArray(entityCache.namespace as any, cacheNamespaces) as any);
@@ -540,6 +547,7 @@ export async function toggleZoneStatus(zoneId: string, isActive: boolean) {
     
     await tx.update(addIpToListRules).set({ isActive, updatedAt: new Date() }).where(and(eq(addIpToListRules.zoneConfigId as any, zoneId), eq(addIpToListRules.userId as any, userId)) as any);
       await tx.update(underAttackRules).set({ isActive, updatedAt: new Date() }).where(and(eq(underAttackRules.zoneConfigId as any, zoneId), eq(underAttackRules.userId as any, userId)) as any);
+      await tx.update(wafRules).set({ isActive, updatedAt: new Date() }).where(and(eq(wafRules.zoneConfigId as any, zoneId), eq(wafRules.userId as any, userId)) as any);
   });
   return { success: true };
 }
@@ -634,6 +642,11 @@ export async function deleteCloudflareRule(ruleId: string, ruleType: string) {
         await tx.delete(actionLogs).where(eq(actionLogs.ruleId as any, ruleId) as any);
         await tx.delete(underAttackRules).where(and(eq(underAttackRules.id as any, ruleId), eq(underAttackRules.userId as any, userId)) as any);
       });
+    } else if (ruleType === "waf_rule") {
+      await db.transaction(async (tx: any) => {
+        await tx.delete(actionLogs).where(eq(actionLogs.ruleId as any, ruleId) as any);
+        await tx.delete(wafRules).where(and(eq(wafRules.id as any, ruleId), eq(wafRules.userId as any, userId)) as any);
+      });
     }
   }
   return { success: true };
@@ -655,6 +668,8 @@ export async function toggleCloudflareRuleStatus(ruleId: string, ruleType: strin
       await db.update(addIpToListRules).set({ isActive, updatedAt: new Date() }).where(and(eq(addIpToListRules.id as any, ruleId), eq(addIpToListRules.userId as any, userId)) as any);
     } else if (ruleType === "under_attack_mode") {
       await db.update(underAttackRules).set({ isActive, updatedAt: new Date() }).where(and(eq(underAttackRules.id as any, ruleId), eq(underAttackRules.userId as any, userId)) as any);
+    } else if (ruleType === "waf_rule") {
+      await db.update(wafRules).set({ isActive, updatedAt: new Date() }).where(and(eq(wafRules.id as any, ruleId), eq(wafRules.userId as any, userId)) as any);
     }
   }
   return { success: true };
@@ -662,7 +677,7 @@ export async function toggleCloudflareRuleStatus(ruleId: string, ruleType: strin
 
 export async function validateTokenPermissionsAction(
   zoneConfigId: string,
-  ruleType: "add_ip_to_list" | "under_attack_mode",
+  ruleType: "add_ip_to_list" | "under_attack_mode" | "waf_rule",
   cfApiTokenOverride?: string
 ) {
   const reqHeaders = await headers();
@@ -701,7 +716,7 @@ export async function validateTokenPermissionsAction(
   const cf = new CloudflareClient(account.cfAccountId, apiToken);
   const checks: { name: string; passed: boolean; error?: string; requiredPermission: string }[] = [];
 
-  // 1. Check Analytics (Common to both rules)
+  // 1. Check Analytics (Common to all rules)
   try {
     await cf.analytics.getTopStats({
       zoneTag: zone.cfZoneId,
@@ -712,7 +727,7 @@ export async function validateTokenPermissionsAction(
     checks.push({
       name: "Analytics Access",
       passed: true,
-      requiredPermission: "Account > Account Analytics > Read OR Zone > Analytics > Read",
+      requiredPermission: "Zone > Analytics > Read",
     });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Unauthorized or invalid query";
@@ -720,7 +735,7 @@ export async function validateTokenPermissionsAction(
       name: "Analytics Access",
       passed: false,
       error: message,
-      requiredPermission: "Account > Account Analytics > Read OR Zone > Analytics > Read",
+      requiredPermission: "Zone > Analytics > Read",
     });
   }
 
@@ -786,9 +801,118 @@ export async function validateTokenPermissionsAction(
         requiredPermission: "Zone > Zone Settings > Edit",
       });
     }
+  } else if (ruleType === "waf_rule") {
+    try {
+      await cf.rulesets.getRulesets(zone.cfZoneId);
+      checks.push({
+        name: "Zone WAF (Read & Edit)",
+        passed: true,
+        requiredPermission: "Zone > Zone WAF > Edit",
+      });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Unauthorized WAF read/edit";
+      checks.push({
+        name: "Zone WAF (Read & Edit)",
+        passed: false,
+        error: message,
+        requiredPermission: "Zone > Zone WAF > Edit",
+      });
+    }
   }
 
   const allPassed = checks.every((c) => c.passed);
   return { success: true, allPassed, checks };
 }
+
+export async function getWafRulesAction(accountRef: string, cfZoneId: string, apiTokenOverride?: string) {
+  try {
+    const { cf } = await getClient(accountRef, apiTokenOverride);
+    const rulesets = await cf.rulesets.getRulesets(cfZoneId);
+    
+    // Find the custom WAF ruleset (phase: http_request_firewall_custom, kind: zone)
+    const customRuleset = rulesets.find(
+      (r) => r.phase === "http_request_firewall_custom" && r.kind === "zone"
+    );
+    
+    if (!customRuleset) {
+      return { success: true, ruleset: null, rules: [] };
+    }
+    
+    // Fetch the full ruleset to get the rules inside it
+    const fullRuleset = await cf.rulesets.getRuleset(cfZoneId, customRuleset.id);
+    return { success: true, ruleset: fullRuleset, rules: fullRuleset.rules ?? [] };
+  } catch (error: any) {
+    return { error: error.message || "Failed to fetch WAF rules" };
+  }
+}
+
+export async function createWafRuleAction(data: {
+  name: string;
+  zoneConfigId: string;
+  cfRulesetId: string;
+  cfRuleId: string;
+  cfRuleName: string;
+  rateLimitThreshold: number;
+  windowSeconds: number;
+  autoOff: boolean;
+  offThreshold?: number | null;
+  sendNotification: boolean;
+  notifyEmails?: string | null;
+  cfApiTokenOverride?: string | null;
+}) {
+  const db = getDb();
+  const reqHeaders = await headers();
+  const cookieHeader = reqHeaders.get("cookie") || undefined;
+  const sessionData = await getSession(cookieHeader);
+  
+  if (!sessionData?.user) {
+    return { error: "Unauthorized. Please log in." };
+  }
+
+  const userId = sessionData.user.id;
+
+  await db.insert(wafRules).values({
+    id: crypto.randomUUID(),
+    userId,
+    ...data,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  });
+  return { success: true };
+}
+
+export async function editWafRuleAction(ruleId: string, data: {
+  name: string;
+  cfRulesetId: string;
+  cfRuleId: string;
+  cfRuleName: string;
+  rateLimitThreshold: number;
+  windowSeconds: number;
+  autoOff: boolean;
+  offThreshold?: number | null;
+  sendNotification: boolean;
+  notifyEmails?: string | null;
+  cfApiTokenOverride?: string | null;
+}) {
+  const db = getDb();
+  const reqHeaders = await headers();
+  const cookieHeader = reqHeaders.get("cookie") || undefined;
+  const sessionData = await getSession(cookieHeader);
+  
+  if (!sessionData?.user) {
+    return { error: "Unauthorized. Please log in." };
+  }
+
+  const userId = sessionData.user.id;
+
+  await db.update(wafRules)
+    .set({
+      ...data,
+      updatedAt: new Date(),
+    })
+    .where(and(eq(wafRules.id, ruleId), eq(wafRules.userId as any, userId)) as any);
+
+  return { success: true };
+}
+
 

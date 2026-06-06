@@ -12,7 +12,7 @@ interface CheckItem {
 
 interface TokenPermissionsValidatorProps {
     zoneId: string;
-    ruleType: "add_ip_to_list" | "under_attack_mode";
+    ruleType: "add_ip_to_list" | "under_attack_mode" | "waf_rule";
     cfApiTokenOverride?: string;
     onValidationComplete: (isValid: boolean) => void;
 }
@@ -146,16 +146,14 @@ export function TokenPermissionsValidator({
                             </div>
                             
                             {!check.passed && (
-                                <>
-                                    <p className="text-[10px] text-rose-600 font-medium leading-relaxed bg-rose-50/50 p-1.5 rounded border border-rose-100/50">
-                                        <span className="font-bold">Error:</span> {check.error}
-                                    </p>
-                                    <div className="text-[10px] text-slate-500 font-medium">
-                                        <span className="font-bold text-slate-700">Required:</span>{" "}
-                                        <code className="bg-slate-100 text-slate-800 px-1 py-0.5 rounded font-mono text-[9px]">{check.requiredPermission}</code>
-                                    </div>
-                                </>
+                                <p className="text-[10px] text-rose-600 font-medium leading-relaxed bg-rose-50/50 p-1.5 rounded border border-rose-100/50">
+                                    <span className="font-bold">Error:</span> {check.error}
+                                </p>
                             )}
+                            <div className="text-[10px] text-slate-500 font-medium">
+                                <span className="font-bold text-slate-700">Required:</span>{" "}
+                                <code className="bg-slate-100 text-slate-800 px-1 py-0.5 rounded font-mono text-[9px]">{check.requiredPermission}</code>
+                            </div>
                         </div>
                     ))}
                 </div>
