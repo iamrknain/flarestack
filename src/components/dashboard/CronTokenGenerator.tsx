@@ -102,7 +102,7 @@ export default function CronTokenGenerator() {
                         {(["cloudflare", "vercel"] as const).map((provider) => (
                             <div key={provider} className="bg-slate-950 rounded-lg p-4 relative">
                                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">
-                                    {provider === "cloudflare" ? "☁️ Cloudflare" : "△ Vercel"} cron command
+                                    {provider === "cloudflare" ? "◇ Cloudflare" : "△ Vercel"} cron command
                                 </p>
                                 <pre className="text-[11px] text-sky-400 font-mono whitespace-pre-wrap leading-relaxed">
                                     {curlCmd(provider)}

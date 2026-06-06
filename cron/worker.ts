@@ -40,7 +40,7 @@ loadEnv(path.join(rootDir, ".env"));
 
 const token = process.env.CRON_API_TOKEN;
 if (!token) {
-    console.error("❌ Error: CRON_API_TOKEN is not set in process.env or .env file.");
+    console.error("✖ [ERROR] CRON_API_TOKEN is not set in process.env or .env file.");
     process.exit(1);
 }
 
@@ -53,9 +53,9 @@ const intervalSec = intervalArg ? parseInt(intervalArg.split("=")[1], 10) : 10; 
 const intervalMs = intervalSec * 1000;
 const baseUrl = urlArg ? urlArg.split("=")[1] : "http://localhost:3000";
 
-console.log("⏰ FlareStack Background Cron Worker started.");
-console.log(`📡 Targeting API endpoints at: ${baseUrl}`);
-console.log(`⏱️ Running interval: ${intervalSec} seconds`);
+console.log("▶ [START] FlareStack Background Cron Worker started.");
+console.log(`⚙ [CONFIG] Targeting API endpoints at: ${baseUrl}`);
+console.log(`⚙ [CONFIG] Running interval: ${intervalSec} seconds`);
 console.log("==========================================");
 
 async function triggerEndpoint(name: string, endpointPath: string) {
@@ -78,12 +78,12 @@ async function triggerEndpoint(name: string, endpointPath: string) {
         }
 
         if (res.ok) {
-            console.log(`[${new Date().toLocaleTimeString()}] ✅ ${name} Cron: Success! User: ${payload.user || "OK"}`);
+            console.log(`[${new Date().toLocaleTimeString()}] ✔ [OK] ${name} Cron: Success! User: ${payload.user || "OK"}`);
         } else {
-            console.error(`[${new Date().toLocaleTimeString()}] ❌ ${name} Cron: Failed (${res.status}). Error: ${payload.error || text}`);
+            console.error(`[${new Date().toLocaleTimeString()}] ✖ [FAIL] ${name} Cron: Failed (${res.status}). Error: ${payload.error || text}`);
         }
     } catch (err: any) {
-        console.error(`[${new Date().toLocaleTimeString()}] ❌ ${name} Cron: Network Error:`, err.message || err);
+        console.error(`[${new Date().toLocaleTimeString()}] ✖ [ERROR] ${name} Cron: Network Error:`, err.message || err);
     }
 }
 

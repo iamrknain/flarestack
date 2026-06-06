@@ -113,7 +113,7 @@ export function PushIpToList({
                             )}
                         </div>
                     </div>
-
+ 
                     {/* CF IP List selector */}
                     <div>
                         <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 block">Target Cloudflare IP List</label>
@@ -138,10 +138,10 @@ export function PushIpToList({
                             <p className="mt-1.5 text-[10px] text-rose-500 font-medium italic">No IP lists found. Go to Cloudflare → Account → Lists to create one.</p>
                         )}
                     </div>
-
+ 
                     {/* Error */}
                     {ipListAddResult?.error && (
-                        <p className="text-[11px] text-rose-600 font-bold bg-rose-50 border border-rose-100 px-3 py-2 rounded-md">⚠ {ipListAddResult.error}</p>
+                        <p className="text-[11px] text-rose-600 font-bold bg-rose-50 border border-rose-100 px-3 py-2 rounded-md">✖ {ipListAddResult.error}</p>
                     )}
 
                     {/* Success */}

@@ -63,7 +63,7 @@ const count = countArg ? parseInt(countArg.split('=')[1], 10) : 5000;
 const workerUrl = workerUrlArg ? workerUrlArg.split('=')[1] : 'http://localhost:8787';
 
 async function main() {
-    console.log('🚀 FlareStack Traffic Simulator');
+    console.log('▶ [START] FlareStack Traffic Simulator');
     console.log('===============================');
     
     if (type === 'vercel') {
@@ -74,11 +74,11 @@ async function main() {
         }
         
         if (!target) {
-            console.error('❌ Error: Vercel projectId not specified and VERCEL_PROJECT_ID not found in .env.vercel');
+            console.error('✖ [ERROR] Vercel projectId not specified and VERCEL_PROJECT_ID not found in .env.vercel');
             process.exit(1);
         }
         
-        console.log(`\n📡 Simulating ${count} Vercel request logs for Project ID: ${target}`);
+        console.log(`\n❖ Simulating ${count} Vercel request logs for Project ID: ${target}`);
         console.log(`🔗 Target worker endpoint: ${workerUrl}/api/vercel-logs`);
         
         // Generate NDJSON payload
@@ -109,28 +109,28 @@ async function main() {
                 throw new Error(`Worker returned status ${res.status}: ${text}`);
             }
             
-            console.log(`✅ Success: Logs sent in ${Date.now() - startTime}ms.`);
+            console.log(`✔ Success: Logs sent in ${Date.now() - startTime}ms.`);
             
             // Trigger scheduled cron task on worker
-            console.log('⏳ Triggering worker cron rules execution...');
+            console.log('⧗ Triggering worker cron rules execution...');
             const cronRes = await fetch(`${workerUrl}/__scheduled`, {
                 method: 'POST'
             });
             
             if (cronRes.ok) {
-                console.log('✅ Success: Scheduled cron trigger completed.');
+                console.log('✔ Success: Scheduled cron trigger completed.');
             } else {
-                console.log(`⚠️ Warning: Cron trigger returned status ${cronRes.status}`);
+                console.log(`⚠ Warning: Cron trigger returned status ${cronRes.status}`);
             }
             
         } catch (err) {
-            console.error('❌ Error sending logs:', err.message);
+            console.error('✖ Error sending logs:', err.message);
             process.exit(1);
         }
         
     } else if (type === 'cloudflare' || type === 'real') {
         if (!target) {
-            console.error('❌ Error: Target domain or URL required (e.g. --target=https://gogoxgeorgia.com)');
+            console.error('✖ Error: Target domain or URL required (e.g. --target=https://gogoxgeorgia.com)');
             process.exit(1);
         }
         
@@ -140,7 +140,7 @@ async function main() {
             url = 'https://' + url;
         }
         
-        console.log(`\n🔥 Sending ${count} real HTTP requests to ${url}`);
+        console.log(`\n✦ Sending ${count} real HTTP requests to ${url}`);
         
         const startTime = Date.now();
         let completed = 0;
@@ -186,9 +186,9 @@ async function main() {
         const pool = Array.from({ length: concurrency }, () => worker());
         await Promise.all(pool);
         
-        console.log(`\n✅ Finished sending real HTTP requests. Total OK: ${completed}, Failed: ${failed}.`);
+        console.log(`\n✔ Finished sending real HTTP requests. Total OK: ${completed}, Failed: ${failed}.`);
     } else {
-        console.error('❌ Error: Invalid type. Supported types: vercel, cloudflare');
+        console.error('✖ Error: Invalid type. Supported types: vercel, cloudflare');
         process.exit(1);
     }
 }

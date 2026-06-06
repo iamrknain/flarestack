@@ -13,7 +13,7 @@
     "db:push": "drizzle-kit push",
     "db:clean": "node scripts/clean-db.js",
     "simulate-traffic": "node scripts/simulate-traffic.js",
-    "cron-worker": "tsx src/cron/worker.ts"
+    "cron-worker": "tsx cron/worker.ts"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

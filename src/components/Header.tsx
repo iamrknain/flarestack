@@ -31,6 +31,12 @@ export function Header({ onToggleSidebar, user }: HeaderProps) {
         if (activeTab === "overview") {
             pageTitle = "Overview";
             pageSubtext = "Monitor and manage your edge defenses in real-time.";
+        } else if (activeTab === "cloudflare") {
+            pageTitle = "Cloudflare";
+            pageSubtext = "Configure automated rate limiting, IP list block rules, and WAF rulesets for your zones.";
+        } else if (activeTab === "vercel") {
+            pageTitle = "Vercel";
+            pageSubtext = "Manage edge bot protection, challenge mode, and request blocking configurations for your projects.";
         } else if (activeTab === "ips") {
             pageTitle = "Top Stats";
             pageSubtext = "Analyze traffic patterns by IP, country, ASN and more. Take action on selected results.";
