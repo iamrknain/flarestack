@@ -77,11 +77,6 @@ export function AddWafRule({ zoneId, onClose, zones = [], accounts = [], rule, r
                     if (res.ruleset) {
                         setRulesetId(res.ruleset.id);
                     }
-                    // If not editing, default to the first WAF rule
-                    if (!rule && res.rules.length > 0) {
-                        setSelectedRuleId(res.rules[0].id);
-                        setSelectedRuleName(res.rules[0].description || "Untitled WAF Rule");
-                    }
                 }
             } catch (err: any) {
                 setWafLoadError(err.message || "Failed to fetch WAF rules from Cloudflare.");
@@ -313,6 +308,7 @@ export function AddWafRule({ zoneId, onClose, zones = [], accounts = [], rule, r
                                 className={inputCls}
                                 disabled={!!rule} // Lock target selection during edit for safety
                             >
+                                <option value="" disabled>-- Select a target WAF Rule --</option>
                                 {wafRulesList.map((r) => (
                                     <option key={r.id} value={r.id}>
                                         {r.description || "Untitled Custom WAF Rule"} ({r.action})
