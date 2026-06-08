@@ -158,9 +158,6 @@ export function VercelBotProtection({ projectId, onClose, rule, zoneConfigs = []
                                 if (selectedRule) {
                                     setName(selectedRule.name);
                                     setTrafficSource(selectedRule.trafficSource);
-                                    if (selectedRule.cfZoneConfigRef) {
-                                        setCfZoneConfigRef(selectedRule.cfZoneConfigRef);
-                                    }
                                     setRateLimitThreshold(selectedRule.rateLimitThreshold);
                                     setAction(selectedRule.action || "challenge");
                                     setWindowSeconds(selectedRule.windowSeconds);

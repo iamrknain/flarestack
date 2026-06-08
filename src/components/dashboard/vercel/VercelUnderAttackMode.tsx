@@ -155,9 +155,6 @@ export function VercelUnderAttackMode({ projectId, onClose, rule, zoneConfigs = 
                                 if (selectedRule) {
                                     setName(selectedRule.name);
                                     setTrafficSource(selectedRule.trafficSource);
-                                    if (selectedRule.cfZoneConfigRef) {
-                                        setCfZoneConfigRef(selectedRule.cfZoneConfigRef);
-                                    }
                                     setRateLimitThreshold(selectedRule.rateLimitThreshold);
                                     setWindowSeconds(selectedRule.windowSeconds);
                                     setAutoOff(selectedRule.autoOff);

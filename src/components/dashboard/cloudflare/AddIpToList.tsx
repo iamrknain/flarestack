@@ -186,15 +186,6 @@ export function AddIpToList({
                                     if (selectedRule.cfApiTokenOverride) {
                                         setCfApiTokenOverride(selectedRule.cfApiTokenOverride);
                                     }
-                                    // Smart match IP list by name if it matches in the current zone config
-                                    const match = discoveredLists.find(l => l.name === selectedRule.cfListName || l.id === selectedRule.cfListId);
-                                    if (match) {
-                                        setSelectedListId(match.id);
-                                        setTemplateListName("");
-                                    } else {
-                                        setSelectedListId(selectedRule.cfListId);
-                                        setTemplateListName(selectedRule.cfListName || "Template List");
-                                    }
                                 }
                                 e.target.value = ""; // Reset select
                             }}

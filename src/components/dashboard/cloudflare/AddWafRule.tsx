@@ -244,16 +244,6 @@ export function AddWafRule({ zoneId, onClose, zones = [], accounts = [], rule, r
                                     if (selectedRule.cfApiTokenOverride) {
                                         setCfApiTokenOverride(selectedRule.cfApiTokenOverride);
                                     }
-                                    // Smart match WAF custom rule by description/name in target zone config
-                                    const match = wafRulesList.find(r => r.description === selectedRule.cfRuleName || r.id === selectedRule.cfRuleId);
-                                    if (match) {
-                                        setSelectedRuleId(match.id);
-                                        setSelectedRuleName(match.description || "Untitled WAF Rule");
-                                    } else {
-                                        setSelectedRuleId(selectedRule.cfRuleId);
-                                        setSelectedRuleName(selectedRule.cfRuleName);
-                                    }
-                                    setRulesetId(selectedRule.cfRulesetId);
                                 }
                                 e.target.value = ""; // Reset select
                             }}
