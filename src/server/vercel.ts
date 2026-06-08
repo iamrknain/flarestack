@@ -258,6 +258,26 @@ export async function toggleVercelProjectStatus(projectId: string, isActive: boo
   return { success: true };
 }
 
+export async function toggleVercelProjectArchiveStatus(projectId: string, isArchived: boolean) {
+  const db = getDb();
+  const reqHeaders = await headers();
+  const cookieHeader = reqHeaders.get("cookie") || undefined;
+  const sessionData = await getSession(cookieHeader);
+  
+  if (!sessionData?.user) {
+    return { error: "Unauthorized. Please log in." };
+  }
+
+  const userId = sessionData.user.id;
+
+  await db
+    .update(vercelProjects)
+    .set({ isArchived, updatedAt: new Date() })
+    .where(and(eq(vercelProjects.id, projectId), eq(vercelProjects.userId as any, userId)) as any);
+
+  return { success: true };
+}
+
 export async function createVercelUnderAttackRule(data: {
   name: string;
   vercelProjectRef: string;

@@ -19,6 +19,7 @@ export const zoneConfigs = pgTable('zone_configs', {
     cfZoneId: varchar('cf_zone_id', { length: 255 }).notNull(),
     domain: varchar('domain', { length: 255 }),
     isActive: boolean('is_active').notNull().default(true),
+    isArchived: boolean('is_archived').notNull().default(false),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });

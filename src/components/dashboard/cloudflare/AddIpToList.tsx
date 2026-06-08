@@ -13,6 +13,7 @@ export function AddIpToList({
     zones,
     accounts,
     rule,
+    rules = [],
 }: {
     zoneId: string;
     onClose: () => void;
@@ -20,6 +21,7 @@ export function AddIpToList({
     zones: any[];
     accounts: any[];
     rule?: any;
+    rules?: any[];
 }) {
     const router = useRouter();
     const [discoveredLists, setDiscoveredLists] = useState<any[]>([]);
@@ -32,6 +34,12 @@ export function AddIpToList({
     const [debouncedToken, setDebouncedToken] = useState(rule?.cfApiTokenOverride || "");
     const [showTokenOverride, setShowTokenOverride] = useState(false);
     const [isHelpOpen, setIsHelpOpen] = useState(false);
+
+    // Controlled inputs for template loading
+    const [name, setName] = useState(rule?.name || "");
+    const [rateLimitThreshold, setRateLimitThreshold] = useState(rule?.rateLimitThreshold ?? 10000);
+    const [windowSeconds, setWindowSeconds] = useState(rule?.windowSeconds ?? 300);
+    const [templateListName, setTemplateListName] = useState("");
 
     useEffect(() => {
         const timer = setTimeout(() => {
@@ -62,11 +70,6 @@ export function AddIpToList({
         setIsSubmitting(true);
         setError(null);
         try {
-            const formData = new FormData(e.currentTarget);
-            const name = formData.get("name") as string;
-            const rateLimitThreshold = parseInt(formData.get("rateLimitThreshold") as string) || 10000;
-            const windowSeconds = parseInt(formData.get("windowSeconds") as string) || 300;
-
             const res = rule
                 ? await editAddIpToListRule(rule.id, {
                     name,
@@ -99,6 +102,8 @@ export function AddIpToList({
             setIsSubmitting(false);
         }
     };
+
+    const ipMitigationRules = (rules || []).filter(r => r.type === "add_ip_to_list");
 
     return (
         <ModalShell
@@ -162,6 +167,56 @@ export function AddIpToList({
                     )}
                 </div>
 
+                {ipMitigationRules.length > 0 && (
+                    <div className="bg-gradient-to-r from-emerald-50/50 to-teal-50/50 border border-emerald-100 rounded-md p-4 transition-all hover:shadow-sm">
+                        <div className="flex items-center gap-2 mb-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="text-emerald-600">
+                                <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                                <line x1="9" y1="3" x2="9" y2="21" />
+                            </svg>
+                            <p className="text-xs font-bold text-emerald-800">Copy Config from Template</p>
+                        </div>
+                        <select
+                            onChange={(e) => {
+                                const selectedRule = ipMitigationRules.find(r => r.id === e.target.value);
+                                if (selectedRule) {
+                                    setName(selectedRule.name);
+                                    setRateLimitThreshold(selectedRule.rateLimitThreshold);
+                                    setWindowSeconds(selectedRule.windowSeconds);
+                                    if (selectedRule.cfApiTokenOverride) {
+                                        setCfApiTokenOverride(selectedRule.cfApiTokenOverride);
+                                    }
+                                    // Smart match IP list by name if it matches in the current zone config
+                                    const match = discoveredLists.find(l => l.name === selectedRule.cfListName || l.id === selectedRule.cfListId);
+                                    if (match) {
+                                        setSelectedListId(match.id);
+                                        setTemplateListName("");
+                                    } else {
+                                        setSelectedListId(selectedRule.cfListId);
+                                        setTemplateListName(selectedRule.cfListName || "Template List");
+                                    }
+                                }
+                                e.target.value = ""; // Reset select
+                            }}
+                            className={`${inputCls} text-xs border-emerald-200 focus:border-emerald-500 focus:ring-emerald-500`}
+                            defaultValue=""
+                        >
+                            <option value="" disabled>Select an existing rule to use as a template...</option>
+                            {ipMitigationRules.map((r: any) => {
+                                const zone = zones.find(z => z.id === r.zoneConfigId);
+                                return (
+                                    <option key={r.id} value={r.id}>
+                                        {zone ? `${zone.name} (${zone.domain || "no domain"})` : "Unknown Zone"} ➔ {r.name}
+                                    </option>
+                                );
+                            })}
+                        </select>
+                        <p className="mt-1.5 text-[10px] text-emerald-700 font-medium">
+                            Quickly copy the request threshold, time window, rule name, and matching lists from another domain's configuration.
+                        </p>
+                    </div>
+                )}
+
                 {error && (
                     <div className="p-3 bg-rose-50 border border-rose-100 rounded-md text-xs text-rose-700 font-bold">
                         {error}
@@ -172,7 +227,15 @@ export function AddIpToList({
                     <p className={sectionLabelCls}>Identity</p>
                     <div>
                         <label className={labelCls}>Rule Name <span className="text-rose-500">*</span></label>
-                        <input type="text" name="name" defaultValue={rule?.name} placeholder='e.g. "API Rate Limiting"' required className={inputCls} />
+                        <input
+                            type="text"
+                            name="name"
+                            value={name}
+                            onChange={(e) => setName(e.target.value)}
+                            placeholder='e.g. "API Rate Limiting"'
+                            required
+                            className={inputCls}
+                        />
                         <p className="mt-1 text-[10px] text-slate-500 font-medium">Internal name for this rule in FlareStack.</p>
                     </div>
                 </div>
@@ -196,8 +259,8 @@ export function AddIpToList({
                                         {l.name} ({l.kind}: {l.id.slice(0, 8)}…)
                                     </option>
                                 ))}
-                                {rule && !discoveredLists.some(l => l.id === selectedListId) && selectedListId && (
-                                    <option value={selectedListId}>{rule.cfListName || "Currently Selected List"} ({selectedListId.slice(0, 8)}…)</option>
+                                {selectedListId && !discoveredLists.some(l => l.id === selectedListId) && (
+                                    <option value={selectedListId}>{templateListName || rule?.cfListName || "Template / Selected List"} ({selectedListId.slice(0, 8)}…)</option>
                                 )}
                             </select>
                             {discoveredLists.length === 0 && !isLoadingLists && (
@@ -215,11 +278,25 @@ export function AddIpToList({
                     <div className="grid grid-cols-2 gap-4">
                         <div>
                             <label className={labelCls}>Threshold (requests)</label>
-                            <input type="number" name="rateLimitThreshold" defaultValue={rule?.rateLimitThreshold ?? 10000} min={process.env.NODE_ENV === "development" ? 1 : 100} className={inputCls} />
+                            <input
+                                type="number"
+                                name="rateLimitThreshold"
+                                value={rateLimitThreshold}
+                                onChange={(e) => setRateLimitThreshold(parseInt(e.target.value) || 0)}
+                                min={process.env.NODE_ENV === "development" ? 1 : 100}
+                                className={inputCls}
+                            />
                         </div>
                         <div>
                             <label className={labelCls}>Window (seconds)</label>
-                            <input type="number" name="windowSeconds" defaultValue={rule?.windowSeconds ?? 300} min={60} className={inputCls} />
+                            <input
+                                type="number"
+                                name="windowSeconds"
+                                value={windowSeconds}
+                                onChange={(e) => setWindowSeconds(parseInt(e.target.value) || 0)}
+                                min={60}
+                                className={inputCls}
+                            />
                         </div>
                     </div>
                     <p className="mt-3 text-xs text-black font-medium opacity-80 pb-1">

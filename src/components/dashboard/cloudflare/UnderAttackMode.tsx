@@ -10,12 +10,20 @@ interface UnderAttackModeProps {
     zoneId: string;
     onClose: () => void;
     isSubmitting: boolean;
-    zones: unknown[];
-    accounts: unknown[];
+    zones: any[];
+    accounts: any[];
     rule?: any;
+    rules?: any[];
 }
 
-export function UnderAttackMode({ zoneId, onClose, rule }: UnderAttackModeProps) {
+export function UnderAttackMode({
+    zoneId,
+    onClose,
+    zones = [],
+    accounts = [],
+    rule,
+    rules = [],
+}: UnderAttackModeProps) {
     const router = useRouter();
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -24,6 +32,16 @@ export function UnderAttackMode({ zoneId, onClose, rule }: UnderAttackModeProps)
     const [debouncedToken, setDebouncedToken] = useState(rule?.cfApiTokenOverride || "");
     const [showTokenOverride, setShowTokenOverride] = useState(false);
     const [isHelpOpen, setIsHelpOpen] = useState(false);
+    
+    // Controlled inputs for template loading
+    const [name, setName] = useState(rule?.name || "");
+    const [rateLimitThreshold, setRateLimitThreshold] = useState(rule?.rateLimitThreshold ?? 10000);
+    const [windowSeconds, setWindowSeconds] = useState(rule?.windowSeconds ?? 300);
+    const [autoOff, setAutoOff] = useState(rule?.autoOff ?? false);
+    const [offThreshold, setOffThreshold] = useState(rule?.offThreshold ?? 2000);
+    const [recoveryLevel, setRecoveryLevel] = useState(rule?.recoveryLevel || "medium");
+    const [sendNotification, setSendNotification] = useState(rule?.sendNotification ?? false);
+    const [notifyEmails, setNotifyEmails] = useState(rule?.notifyEmails || "");
 
     useEffect(() => {
         const timer = setTimeout(() => {
@@ -31,39 +49,22 @@ export function UnderAttackMode({ zoneId, onClose, rule }: UnderAttackModeProps)
         }, 500);
         return () => clearTimeout(timer);
     }, [cfApiTokenOverride]);
-    
-    // Auto-Off toggle state
-    const [autoOff, setAutoOff] = useState(rule?.autoOff ?? false);
-    
-    // Notifications state
-    const [sendNotification, setSendNotification] = useState(rule?.sendNotification ?? false);
-
-    // Time window state (in seconds)
-    const [windowSeconds, setWindowSeconds] = useState(rule?.windowSeconds ?? 300);
 
     const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
         setIsSubmitting(true);
         setError(null);
         try {
-            const formData = new FormData(e.currentTarget);
-            const name = formData.get("name") as string;
-            const rateLimitThreshold = parseInt(formData.get("rateLimitThreshold") as string) || 10000;
-            const offThresholdVal = formData.get("offThreshold");
-            const offThreshold = autoOff && offThresholdVal ? parseInt(offThresholdVal as string) : null;
-            const recoveryLevel = autoOff ? (formData.get("recoveryLevel") as string) : null;
-            const notifyEmails = sendNotification ? (formData.get("notifyEmails") as string) : null;
-
             const res = rule
                 ? await editUnderAttackRule(rule.id, {
                     name,
                     rateLimitThreshold,
                     autoOff,
-                    offThreshold,
-                    recoveryLevel,
+                    offThreshold: autoOff ? offThreshold : null,
+                    recoveryLevel: autoOff ? recoveryLevel : null,
                     windowSeconds,
                     sendNotification,
-                    notifyEmails,
+                    notifyEmails: sendNotification ? notifyEmails : null,
                     cfApiTokenOverride: cfApiTokenOverride.trim() || null,
                 })
                 : await createUnderAttackRule({
@@ -71,11 +72,11 @@ export function UnderAttackMode({ zoneId, onClose, rule }: UnderAttackModeProps)
                     zoneConfigId: zoneId,
                     rateLimitThreshold,
                     autoOff,
-                    offThreshold,
-                    recoveryLevel,
+                    offThreshold: autoOff ? offThreshold : null,
+                    recoveryLevel: autoOff ? recoveryLevel : null,
                     windowSeconds,
                     sendNotification,
-                    notifyEmails,
+                    notifyEmails: sendNotification ? notifyEmails : null,
                     cfApiTokenOverride: cfApiTokenOverride.trim() || null,
                 });
 
@@ -92,6 +93,8 @@ export function UnderAttackMode({ zoneId, onClose, rule }: UnderAttackModeProps)
             setIsSubmitting(false);
         }
     };
+
+    const underAttackRulesList = (rules || []).filter(r => r.type === "under_attack_mode");
 
     return (
         <ModalShell
@@ -154,6 +157,58 @@ export function UnderAttackMode({ zoneId, onClose, rule }: UnderAttackModeProps)
                     )}
                 </div>
 
+                {underAttackRulesList.length > 0 && (
+                    <div className="bg-gradient-to-r from-rose-50/50 to-orange-50/50 border border-rose-100 rounded-md p-4 transition-all hover:shadow-sm">
+                        <div className="flex items-center gap-2 mb-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="text-rose-600">
+                                <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                                <line x1="9" y1="3" x2="9" y2="21" />
+                            </svg>
+                            <p className="text-xs font-bold text-rose-800">Copy Config from Template</p>
+                        </div>
+                        <select
+                            onChange={(e) => {
+                                const selectedRule = underAttackRulesList.find(r => r.id === e.target.value);
+                                if (selectedRule) {
+                                    setName(selectedRule.name);
+                                    setRateLimitThreshold(selectedRule.rateLimitThreshold);
+                                    setWindowSeconds(selectedRule.windowSeconds);
+                                    setAutoOff(selectedRule.autoOff);
+                                    if (selectedRule.offThreshold !== null && selectedRule.offThreshold !== undefined) {
+                                        setOffThreshold(selectedRule.offThreshold);
+                                    }
+                                    if (selectedRule.recoveryLevel) {
+                                        setRecoveryLevel(selectedRule.recoveryLevel);
+                                    }
+                                    setSendNotification(selectedRule.sendNotification);
+                                    if (selectedRule.notifyEmails) {
+                                        setNotifyEmails(selectedRule.notifyEmails);
+                                    }
+                                    if (selectedRule.cfApiTokenOverride) {
+                                        setCfApiTokenOverride(selectedRule.cfApiTokenOverride);
+                                    }
+                                }
+                                e.target.value = ""; // Reset select
+                            }}
+                            className={`${inputCls} text-xs border-rose-200 focus:border-rose-500 focus:ring-rose-500`}
+                            defaultValue=""
+                        >
+                            <option value="" disabled>Select an existing rule to use as a template...</option>
+                            {underAttackRulesList.map((r: any) => {
+                                const zone = zones.find(z => z.id === r.zoneConfigId);
+                                return (
+                                    <option key={r.id} value={r.id}>
+                                        {zone ? `${zone.name} (${zone.domain || "no domain"})` : "Unknown Zone"} ➔ {r.name}
+                                    </option>
+                                );
+                            })}
+                        </select>
+                        <p className="mt-1.5 text-[10px] text-rose-700 font-medium">
+                            Quickly copy the request threshold, time window, rule name, auto-off thresholds, and notification emails from another domain's configuration.
+                        </p>
+                    </div>
+                )}
+
                 {error && (
                     <div className="p-3 bg-rose-50 border border-rose-100 rounded-md text-xs text-rose-700 font-bold">
                         {error}
@@ -165,7 +220,15 @@ export function UnderAttackMode({ zoneId, onClose, rule }: UnderAttackModeProps)
                     <p className={sectionLabelCls}>Identity</p>
                     <div>
                         <label className={labelCls}>Rule Name <span className="text-rose-500">*</span></label>
-                        <input type="text" name="name" defaultValue={rule?.name} placeholder='e.g. "Auto Under Attack Mode"' required className={inputCls} />
+                        <input
+                            type="text"
+                            name="name"
+                            value={name}
+                            onChange={(e) => setName(e.target.value)}
+                            placeholder='e.g. "Auto Under Attack Mode"'
+                            required
+                            className={inputCls}
+                        />
                         <p className="mt-1 text-[10px] text-slate-500 font-medium">Internal name for this rule in FlareStack.</p>
                     </div>
                 </div>
@@ -176,7 +239,15 @@ export function UnderAttackMode({ zoneId, onClose, rule }: UnderAttackModeProps)
                     <div className="grid grid-cols-2 gap-4">
                         <div>
                             <label className={labelCls}>Trigger Limit (requests)</label>
-                            <input type="number" name="rateLimitThreshold" defaultValue={rule?.rateLimitThreshold ?? 10000} min={1} required className={inputCls} />
+                            <input
+                                type="number"
+                                name="rateLimitThreshold"
+                                value={rateLimitThreshold}
+                                onChange={(e) => setRateLimitThreshold(parseInt(e.target.value) || 0)}
+                                min={1}
+                                required
+                                className={inputCls}
+                            />
                         </div>
                         <div>
                             <label className={labelCls}>Window (seconds)</label>
@@ -226,11 +297,25 @@ export function UnderAttackMode({ zoneId, onClose, rule }: UnderAttackModeProps)
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
                                     <label className={labelCls}>Recovery Limit (requests)</label>
-                                    <input type="number" name="offThreshold" defaultValue={rule?.offThreshold ?? 2000} min={1} required className={inputCls} />
+                                    <input
+                                        type="number"
+                                        name="offThreshold"
+                                        value={offThreshold}
+                                        onChange={(e) => setOffThreshold(parseInt(e.target.value) || 0)}
+                                        min={1}
+                                        required
+                                        className={inputCls}
+                                    />
                                 </div>
                                 <div>
                                     <label className={labelCls}>Recovery Security Level</label>
-                                    <select name="recoveryLevel" defaultValue={rule?.recoveryLevel || "medium"} required className={inputCls}>
+                                    <select
+                                        name="recoveryLevel"
+                                        value={recoveryLevel}
+                                        onChange={(e) => setRecoveryLevel(e.target.value)}
+                                        required
+                                        className={inputCls}
+                                    >
                                         <option value="essentially_off">Essentially Off (Very Low)</option>
                                         <option value="low">Low</option>
                                         <option value="medium">Medium</option>
@@ -277,7 +362,8 @@ export function UnderAttackMode({ zoneId, onClose, rule }: UnderAttackModeProps)
                                 <input
                                     type="text"
                                     name="notifyEmails"
-                                    defaultValue={rule?.notifyEmails || ""}
+                                    value={notifyEmails}
+                                    onChange={(e) => setNotifyEmails(e.target.value)}
                                     placeholder="e.g. admin@example.com, security@example.com"
                                     required
                                     className={inputCls}

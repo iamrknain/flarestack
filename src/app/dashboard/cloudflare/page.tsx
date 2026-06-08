@@ -252,6 +252,7 @@ export default function CloudflarePage() {
                     zones={zones}
                     accounts={accounts}
                     isSubmitting={false}
+                    rules={rules}
                 />
             )}
 
@@ -267,6 +268,7 @@ export default function CloudflarePage() {
                         zones={zones}
                         accounts={accounts}
                         isSubmitting={false}
+                        rules={rules}
                     />
                 ) : editingRule.type === "under_attack_mode" ? (
                     <UnderAttackMode
@@ -279,6 +281,7 @@ export default function CloudflarePage() {
                         zones={zones}
                         accounts={accounts}
                         isSubmitting={false}
+                        rules={rules}
                     />
                 ) : editingRule.type === "waf_rule" ? (
                     <AddWafRule
@@ -291,6 +294,7 @@ export default function CloudflarePage() {
                         zones={zones}
                         accounts={accounts}
                         isSubmitting={false}
+                        rules={rules}
                     />
                 ) : null
             )}

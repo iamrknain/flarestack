@@ -577,6 +577,26 @@ export async function toggleZoneStatus(zoneId: string, isActive: boolean) {
   return { success: true };
 }
 
+export async function toggleZoneArchiveStatus(zoneId: string, isArchived: boolean) {
+  const db = getDb();
+  const reqHeaders = await headers();
+  const cookieHeader = reqHeaders.get("cookie") || undefined;
+  const sessionData = await getSession(cookieHeader);
+  
+  if (!sessionData?.user) {
+    return { error: "Unauthorized. Please log in." };
+  }
+
+  const userId = sessionData.user.id;
+
+  await db
+    .update(zoneConfigs)
+    .set({ isArchived, updatedAt: new Date() })
+    .where(and(eq(zoneConfigs.id, zoneId), eq(zoneConfigs.userId as any, userId)) as any);
+    
+  return { success: true };
+}
+
 export async function createAddIpToListRule(data: {
   name: string;
   zoneConfigId: string;

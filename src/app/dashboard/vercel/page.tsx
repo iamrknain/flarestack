@@ -267,6 +267,8 @@ export default function VercelPage() {
                     projectId={ruleModalProjectId}
                     rule={selectedRuleToEdit}
                     zoneConfigs={zoneConfigs}
+                    rules={rules}
+                    projects={vercelProjects}
                     onClose={() => {
                         setSelectedRuleType(null);
                         setRuleModalProjectId(null);
